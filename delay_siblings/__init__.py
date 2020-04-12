@@ -39,8 +39,6 @@ from anki.hooks import addHook
 from anki.utils import intTime
 import random
 
-VERSION = 1.0
-
 ENABLED = 'sibling_delaying_enabled'
 QUIET = 'sibling_delaying_quiet'
 
