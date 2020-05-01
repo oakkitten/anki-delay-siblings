@@ -7,7 +7,6 @@ to appear days apart. If you review one of these cards today, your
 reviewing the sibling card tomorrow will make little sense and will just
 waste your time.
 
-
 This script is especially useful when you are reviewing a deck that
 hasn't been touched for a while and thus has a lot of siblings due
 simultaneously.
@@ -54,12 +53,6 @@ You can find the following 2 options in the Tools menu:
 * Enable sibling delaying. Enables or disables the script for current
 deck.
 * Don’t notify if a card is delayed by less than 2 weeks. Since only the
-interval of the sibling is considered, current card or other siblings
+interval of the sibling is considered, the current card or other siblings
 can become due close to the sibling. To prevent notification spam, check
 this option.
-
-### Disclaimer
-
-This script uses some non-public members of Anki code and directly
-executes SQL code on the database. It works well for me, but you are
-using this at your own risk.

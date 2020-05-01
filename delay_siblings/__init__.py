@@ -81,7 +81,7 @@ def showAnswer():
 
         if min_new_when > when:
             new_when = random.randint(min_new_when, max_new_when)
-            reschedule(sibling, new_when, filtered)
+            reschedule(sibling, new_when + mw.col.sched.today, filtered)
 
             if (new_when - when) >= 14 or not deck[QUIET]:
                 question = stripHTML(sibling.q())
@@ -137,7 +137,6 @@ def calc_new_when(interval: int, cards_per_note: int):
 # https://github.com/ankitects/anki/blob/351d8a309f7d3c0cae7f818313b1a0e7aac4408a/pylib/anki/sched.py#L566-L573
 # noinspection PyProtectedMember
 def reschedule(sibling: Card, due: int, filtered: bool):
-    due += mw.col.sched.today
     if filtered:
         sibling.odue = due
     else:
