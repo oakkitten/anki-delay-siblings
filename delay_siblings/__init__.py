@@ -41,8 +41,8 @@ from aqt.qt import QAction
 from aqt import mw
 from aqt.utils import tooltip
 
-ENABLED = 'sibling_delaying_enabled'
-QUIET = 'sibling_delaying_quiet'
+ENABLED = 'enabled'
+QUIET = 'quiet'
 
 # see the sources of both anki/sched.py and anki/schedv2.py:
 # card types: 0=new, 1=lrn, 2=rev, 3=relrn
@@ -50,12 +50,12 @@ QUIET = 'sibling_delaying_quiet'
 CARD_TYPE_REVIEWING = 2
 QUEUE_TYPE_SUSPENDED = -1
 
-# current deck, only used for storing settings
-deck: Dict
+global_config: Dict
+current_deck_config: Dict
 
 # noinspection PyPep8Naming
 def showAnswer():
-    if not deck[ENABLED]:
+    if not current_deck_config[ENABLED]:
         return
 
     siblings = get_siblings(mw.reviewer.card)
@@ -83,7 +83,7 @@ def showAnswer():
             new_when = random.randint(min_new_when, max_new_when)
             reschedule(sibling, new_when + mw.col.sched.today, filtered)
 
-            if (new_when - when) >= 14 or not deck[QUIET]:
+            if (new_when - when) >= 14 or not current_deck_config[QUIET]:
                 question = stripHTML(sibling.q())
                 out.append(f"Sibling: {question} (interval: <b>{interval}</b> days)<br>"
                            f"Rescheduling: <b>{due}</b> → <span style='color: crimson'><b>{new_when}</b></span> "
@@ -148,14 +148,15 @@ def reschedule(sibling: Card, due: int, filtered: bool):
 
 ########################################################################################################################
 
-
 def flip_enabled(_key):
-    enabled = deck[ENABLED] = not deck[ENABLED]
+    enabled = current_deck_config[ENABLED] = not current_deck_config[ENABLED]
     menu_quiet.setEnabled(enabled)
+    save_global_config()
 
 
 def flip_quiet(_key):
-    deck[QUIET] = not deck[QUIET]
+    current_deck_config[QUIET] = not current_deck_config[QUIET]
+    save_global_config()
 
 
 mw.form.menuTools.addSeparator()
@@ -168,24 +169,39 @@ menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks",
 menu_quiet.triggered.connect(flip_quiet)
 mw.form.menuTools.addAction(menu_quiet)
 
+########################################################################################################################
+
+def load_global_config():
+    global global_config
+    global_config = mw.addonManager.getConfig(__name__)
+
+
+def save_global_config():
+    mw.addonManager.writeConfig(__name__, global_config)
+
+
+def load_current_deck_config(deck_id: int):
+    global current_deck_config
+    current_deck_config = global_config.setdefault(str(deck_id), {})    # str() as json keys can't be numbers
+    current_deck_config.setdefault(ENABLED, False)
+    current_deck_config.setdefault(QUIET, False)
+
 
 # noinspection PyPep8Naming
 def afterStateChange(next_state: str, _prev, *_args):
     if next_state in ["overview", "review"]:
-        global deck
-        deck = mw.col.decks.current()
-        enabled = deck.setdefault(ENABLED, False)
-        quiet = deck.setdefault(QUIET, False)
+        load_current_deck_config(mw.col.decks.current()["id"])
         menu_enabled.setEnabled(True)
-        menu_enabled.setChecked(enabled)
-        menu_quiet.setChecked(quiet)
-        menu_quiet.setEnabled(enabled)
     else:
+        load_current_deck_config(0)
         menu_enabled.setEnabled(False)
-        menu_enabled.setChecked(False)
-        menu_quiet.setEnabled(False)
-        menu_quiet.setChecked(False)
+    menu_enabled.setChecked(current_deck_config[ENABLED])
+    menu_quiet.setChecked(current_deck_config[QUIET])
+    menu_quiet.setEnabled(current_deck_config[ENABLED])
 
+
+load_global_config()
+load_current_deck_config(0)
 
 addHook('showAnswer', showAnswer)
 addHook('afterStateChange', afterStateChange)
