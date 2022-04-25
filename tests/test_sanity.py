@@ -1,22 +1,46 @@
-import aqt
-from anki.consts import QUEUE_TYPE_REV, QUEUE_TYPE_LRN
-from pytest import approx
-
-from tests.anki_helpers import (get_scheduler_card, answer_card, EASY, clock_set_back,
-                                minutes)
+from tests.anki_helpers import EASY, DO_NOT_ANSWER, do_some_historic_reviews, get_card
 
 
-def test_sanity(setup):
-    card = get_scheduler_card()
 
-    with clock_set_back(by_days=10) as epoch:
-        answer_card(card, EASY)
+def test_addon_has_no_effect_if_not_enabled(setup):
+    import delay_siblings  # noqa
 
-    assert card.queue == QUEUE_TYPE_LRN
-    assert card.due == approx(epoch + minutes(10), abs=minutes(2))
+    card1_id, card2_id = setup.note1_card_ids
 
-    with clock_set_back(by_days=5):
-        answer_card(card, EASY)
+    do_some_historic_reviews({
+        -20: {card1_id: EASY, card2_id: EASY},
+        -15: {card1_id: EASY, card2_id: EASY},
+        -10: {card1_id: EASY, card2_id: EASY},
+    })
 
-    assert card.queue == QUEUE_TYPE_REV
-    assert card.due == aqt.mw.col.sched.today - 5
+    card2_old_due = get_card(card2_id).due
+
+    do_some_historic_reviews({
+        0: {card1_id: DO_NOT_ANSWER},
+    })
+
+    card2_new_due = get_card(card2_id).due
+    assert card2_old_due == card2_new_due
+
+
+def test_addon_changes_one_card_due_if_enabled(setup):
+    import delay_siblings
+
+    card1_id, card2_id = setup.note1_card_ids
+
+    do_some_historic_reviews({
+        -20: {card1_id: EASY, card2_id: EASY},
+        -15: {card1_id: EASY, card2_id: EASY},
+        -10: {card1_id: EASY, card2_id: EASY},
+    })
+
+    card2_old_due = get_card(card2_id).due
+
+    delay_siblings.config.current_deck.enabled = True
+
+    do_some_historic_reviews({
+        0: {card1_id: DO_NOT_ANSWER},
+    })
+
+    card2_new_due = get_card(card2_id).due
+    assert card2_old_due != card2_new_due

@@ -97,10 +97,17 @@ def empty_anki_session_started():
 
 
 @contextmanager
+def delay_siblings_config_loaded(session):
+    with session.addon_config_created(package_name="delay_siblings", user_config={}):
+        yield
+
+
+@contextmanager
 def profile_created_and_loaded(session):
     with temporary_user(session.base, "test_user", "en_US"):
-        with session.profile_loaded():
-            yield session
+        with delay_siblings_config_loaded(session):
+            with session.profile_loaded():
+                yield session
 
 
 @contextmanager
@@ -140,8 +147,8 @@ def set_up_test_deck_and_test_model_and_two_notes():
         model_name="test_model",
         field_names=["field1", "field2"],
         card_descriptions=[
-            CardDescription(name="card_1", front="{{field1}}", back="{{field2}}"),
-            CardDescription(name="card_2", front="{{field2}}", back="{{field1}}")
+            CardDescription(name="card_1", front="{{field1}}", back="{{field1}}<br> {{field2}}"),
+            CardDescription(name="card_2", front="{{field2}}", back="{{field2}}<br> {{field1}}")
         ],
     )
 
