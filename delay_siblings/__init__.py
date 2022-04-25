@@ -198,14 +198,14 @@ class DeckConfig:
 
 class Config:
     def __init__(self):
-        self.data = mw.addonManager.getConfig(__name__)
-        self.current_deck = DeckConfig(self.data, 0)
+        self.data = mw.addonManager.getConfig(__name__) or {}
+        self.current_deck = DeckConfig(self, 0)
 
     def save(self):
         mw.addonManager.writeConfig(__name__, self.data)
 
     def set_current_deck_id(self, deck_id):
-        self.current_deck = DeckConfig(self.data, deck_id)
+        self.current_deck = DeckConfig(self, deck_id)
 
 config = Config()
 
