@@ -156,7 +156,7 @@ class Review:
             return interval if interval >= 0 else -interval / 60 / 60 / 24
 
         def interval_to_string(interval):
-            return f"{interval} days" if interval >= 0 else f"{-interval / 60} minutes"
+            return f"{interval} days" if interval >= 0 else f"{-interval / 60:n} minutes"
 
         answer = {0: "again", 1: "hard", 2: "good", 3: "easy"}[self.button_chosen]
 
@@ -171,27 +171,46 @@ class Review:
         due = date + datetime.timedelta(days=interval_to_days(self.interval))
         due_str = due.strftime("%b %d")
 
-        return f"{answer} @ {date_str} [{old_interval} -> {new_interval}, {ease}%, due @ {due_str}]"
+        return f"{answer} @ {date_str} [{old_interval} -> {new_interval}, {ease:n}%, due @ {due_str}]"
 
 
-def get_card_info(card: Card):
-    question = strip_html(card.question())
-    answer = strip_html(card.answer())
-    due = card.due
-
-    reviews = [
+def get_card_reviews(card_id: int) -> Sequence[Review]:
+    return [
         Review(*data) for data
-        in aqt.mw.col.db.all("select * from revlog where cid = ?", card.id)
+        in aqt.mw.col.db.all("select * from revlog where cid = ?", card_id)
     ]
-    reviews_str = "\n              ".join(review.to_string() for review in reviews)
 
-    return dedent(f"""
-          id: {card.id}
-    question: {question}
-      answer: {answer}
-         due: {due}
-     reviews: {reviews_str}
-    """)
+
+@dataclass
+class CardInfo:
+    id: int
+    question: str
+    answer: str
+    due: int
+    reviews: Sequence[Review]
+
+    @classmethod
+    def from_card(cls, card: Card) -> "CardInfo":
+        return cls(
+            card.id,
+            question=strip_html(card.question()),
+            answer=strip_html(card.answer()),
+            due=card.due,
+            reviews=get_card_reviews(card.id),
+        )
+
+    def to_string(self) -> str:
+        reviews_str = "\n                  ".join(
+            review.to_string() for review in self.reviews
+        )
+
+        return dedent(f"""
+              id: {self.id}
+        question: {self.question}
+          answer: {self.answer}
+             due: {self.due}
+         reviews: {reviews_str}
+        """)
 
 
 def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
@@ -225,7 +244,8 @@ def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
 
         if ids_to_answers:
             card_info = "\n".join(
-                get_card_info(get_card(card_id)) for card_id in ids_to_answers.keys()
+                CardInfo.from_card(get_card(card_id)).to_string()
+                for card_id in ids_to_answers.keys()
             )
             raise Exception("Reviewer didn't show some of the expected cards: \n"
                             f"{card_info}")
