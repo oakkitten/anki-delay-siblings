@@ -223,12 +223,12 @@ def flip_quiet(_key):
 
 
 menu_enabled = QAction("Enable sibling delaying",
-                       mw, checkable=True, enabled=False)
-menu_enabled.triggered.connect(flip_enabled)
+                       mw, checkable=True, enabled=False)  # noqa
+menu_enabled.triggered.connect(flip_enabled)  # noqa
 
 menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks",
-                     mw, checkable=True, enabled=False)
-menu_quiet.triggered.connect(flip_quiet)
+                     mw, checkable=True, enabled=False)  # noqa
+menu_quiet.triggered.connect(flip_quiet)  # noqa
 
 mw.form.menuTools.addSeparator()
 mw.form.menuTools.addAction(menu_enabled)
