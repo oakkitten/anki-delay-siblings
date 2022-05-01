@@ -174,3 +174,26 @@ def test_tooltip_not_called_if_quiet(setup, quiet, monkeypatch):
     })
 
     assert delay_siblings.tooltip.call_count == (0 if quiet else 1)  # noqa
+
+
+def test_card_gets_removed_from_review_queue(setup):
+    import delay_siblings  # noqa
+
+    card1_id, card2_id = setup.note1_card_ids
+
+    do_some_historic_reviews({
+        -20: {card1_id: EASY, card2_id: EASY},
+        -15: {card1_id: EASY, card2_id: EASY},
+        -10: {card1_id: EASY, card2_id: EASY},
+    })
+
+    delay_siblings.config.current_deck.enabled = True
+
+    do_some_historic_reviews({
+        0: {card1_id: DO_NOT_ANSWER}
+    })
+
+    with pytest.raises(Exception, match=f"(?s)didn't show.*id: {card2_id}"):
+        do_some_historic_reviews({
+            0: {card2_id: EASY},
+        })
