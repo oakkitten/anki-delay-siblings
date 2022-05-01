@@ -16,19 +16,106 @@ from anki.utils import strip_html
 anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
 
 
+# used to print some stuff that you can see by running
+#   $ python -m pytest -s
 say = print
+
+def say_card(card_or_card_id: Card | int):
+    if isinstance(card_or_card_id, int):
+        card_or_card_id = get_card(card_or_card_id)
+    say(CardInfo.from_card(card_or_card_id).to_string())
+
+
+############################################################################## get stuff
 
 
 def get_collection() -> Collection:
     return aqt.mw.col
 
-
 def get_deck_ids() -> list[int]:
     return [item.id for item in get_collection().decks.all_names_and_ids()]
 
-
 def get_model_ids() -> list[int]:
     return [item.id for item in get_collection().models.all_names_and_ids()]
+
+def get_card(card_id: int) -> Card:
+    return aqt.mw.col.get_card(card_id)
+
+
+@dataclass
+class Review:
+    id: int
+    cid: int
+    usn: int
+    button_chosen: int
+    interval: int
+    last_interval: int
+    ease: int
+    taken_millis: int
+    review_kind: int
+
+    def to_string(self):
+        def interval_to_days(interval):
+            return interval if interval >= 0 else -interval / 60 / 60 / 24
+
+        def interval_to_string(interval):
+            return f"{interval} days" if interval >= 0 else f"{-interval / 60:n} minutes"
+
+        answer = {0: "again", 1: "hard", 2: "good", 3: "easy"}[self.button_chosen]
+
+        date = datetime.fromtimestamp(self.id / 1000)
+        date_str = date.strftime("%b %d %H:%M")
+
+        old_interval = interval_to_string(self.last_interval)
+        new_interval = interval_to_string(self.interval)
+
+        ease = self.ease / 10
+
+        due = date + timedelta(days=interval_to_days(self.interval))
+        due_str = due.strftime("%b %d")
+
+        return f"{answer} @ {date_str} [{old_interval} -> {new_interval}, {ease:n}%, due @ {due_str}]"
+
+def get_card_reviews(card_id: int) -> Sequence[Review]:
+    return [
+        Review(*data) for data
+        in aqt.mw.col.db.all("select * from revlog where cid = ?", card_id)
+    ]
+
+
+@dataclass
+class CardInfo:
+    id: int
+    question: str
+    answer: str
+    due: int
+    reviews: Sequence[Review]
+
+    @classmethod
+    def from_card(cls, card: Card) -> "CardInfo":
+        return cls(
+            card.id,
+            question=strip_html(card.question()),
+            answer=strip_html(card.answer()),
+            due=card.due,
+            reviews=get_card_reviews(card.id),
+        )
+
+    def to_string(self) -> str:
+        reviews_str = "\n                  ".join(
+            review.to_string() for review in self.reviews
+        )
+
+        return dedent(f"""
+              id: {self.id}
+        question: {self.question}
+          answer: {self.answer}
+             due: {self.due}
+         reviews: {reviews_str}
+        """)
+
+
+########################################################################### create stuff
 
 
 @dataclass
@@ -78,6 +165,39 @@ def add_note(model_name: str, deck_name: str, fields: dict[str, str],
     return note.id
 
 
+################################################################### create filtered deck
+
+
+def create_filtered_deck(search_string) -> int:
+    search_term = FilteredDeckConfig.SearchTerm(
+        search=search_string,
+        limit=100,
+        order=0,  # random?
+    )
+
+    filtered_deck = get_collection().sched.get_or_create_filtered_deck(DeckId(0))
+    del filtered_deck.config.search_terms[:]
+    filtered_deck.config.search_terms.append(search_term)
+    return get_collection().sched.add_or_update_filtered_deck(filtered_deck).id
+
+
+# note that creating a filtered deck will change the current deck for some reason
+# either way, you should be calling `show_deck_overview` inside the with clause
+@contextmanager
+def filtered_deck_created(search_string):
+    deck_id = create_filtered_deck(search_string)
+    yield deck_id
+    get_collection().decks.remove([deck_id])
+
+
+def show_deck_overview(deck_id):
+    get_collection().decks.set_current(deck_id)
+    aqt.mw.moveToState("overview")
+
+
+################################################################################ reviews
+
+
 def set_scheduler(version: int):
     if version == 2:
         get_collection().set_v3_scheduler(enabled=False)
@@ -89,14 +209,7 @@ def set_scheduler(version: int):
         raise ValueError(f"Bad scheduler version: {version}")
 
 
-def get_card(card_id: int) -> Card:
-    return aqt.mw.col.get_card(card_id)
-
-
-################################################################################ reviews
-
-
-# this changes clock for both Python and Rust by doing some C magic
+# this changes clock for both Python and Rust by doing some C magic.
 # libfaketime needs to be preloaded by the dynamic linker;
 # this can be done by running the following before the tests:
 #   $ eval $(python-libfaketime)
@@ -113,32 +226,21 @@ def clock_set_forward_by(**kwargs):
         yield
 
 
-def days_to_seconds(n):
-    return n * 24 * 60 * 60
-
-
 def reset_window_to_review_state():
     aqt.mw.moveToState("overview")
     aqt.mw.moveToState("review")
     assert aqt.mw.state == "review"
 
+def reviewer_get_current_card():
+    card = aqt.mw.reviewer.card
+    assert card is not None
+    return card
 
 def reviewer_show_question():
     aqt.mw.reviewer._showQuestion()
 
-
 def reviewer_show_answer():
     aqt.mw.reviewer._showAnswer()
-
-
-def reviewer_bury_current_card():
-    aqt.mw.reviewer.bury_current_card()
-
-
-def unbury_cards_for_current_deck():
-    current_deck_id = get_collection().decks.get_current_id()
-    get_collection().sched.unbury_deck(current_deck_id)
-
 
 DO_NOT_ANSWER = -1
 AGAIN = 0
@@ -146,95 +248,15 @@ HARD = 1
 GOOD = 2
 EASY = 3
 
-
 def reviewer_answer_card(answer: int):
     aqt.mw.reviewer._answerCard(answer)
 
+def reviewer_bury_current_card():
+    aqt.mw.reviewer.bury_current_card()
 
-def reviewer_get_current_card():
-    card = aqt.mw.reviewer.card
-    assert card is not None
-    return card
-
-
-@dataclass
-class Review:
-    id: int
-    cid: int
-    usn: int
-    button_chosen: int
-    interval: int
-    last_interval: int
-    ease: int
-    taken_millis: int
-    review_kind: int
-
-    def to_string(self):
-        def interval_to_days(interval):
-            return interval if interval >= 0 else -interval / 60 / 60 / 24
-
-        def interval_to_string(interval):
-            return f"{interval} days" if interval >= 0 else f"{-interval / 60:n} minutes"
-
-        answer = {0: "again", 1: "hard", 2: "good", 3: "easy"}[self.button_chosen]
-
-        date = datetime.fromtimestamp(self.id / 1000)
-        date_str = date.strftime("%b %d %H:%M")
-
-        old_interval = interval_to_string(self.last_interval)
-        new_interval = interval_to_string(self.interval)
-
-        ease = self.ease / 10
-
-        due = date + timedelta(days=interval_to_days(self.interval))
-        due_str = due.strftime("%b %d")
-
-        return f"{answer} @ {date_str} [{old_interval} -> {new_interval}, {ease:n}%, due @ {due_str}]"
-
-
-def get_card_reviews(card_id: int) -> Sequence[Review]:
-    return [
-        Review(*data) for data
-        in aqt.mw.col.db.all("select * from revlog where cid = ?", card_id)
-    ]
-
-
-@dataclass
-class CardInfo:
-    id: int
-    question: str
-    answer: str
-    due: int
-    reviews: Sequence[Review]
-
-    @classmethod
-    def from_card(cls, card: Card) -> "CardInfo":
-        return cls(
-            card.id,
-            question=strip_html(card.question()),
-            answer=strip_html(card.answer()),
-            due=card.due,
-            reviews=get_card_reviews(card.id),
-        )
-
-    def to_string(self) -> str:
-        reviews_str = "\n                  ".join(
-            review.to_string() for review in self.reviews
-        )
-
-        return dedent(f"""
-              id: {self.id}
-        question: {self.question}
-          answer: {self.answer}
-             due: {self.due}
-         reviews: {reviews_str}
-        """)
-
-
-def say_card(card_or_card_id: Card | int):
-    if isinstance(card_or_card_id, int):
-        card_or_card_id = get_card(card_or_card_id)
-    say(CardInfo.from_card(card_or_card_id).to_string())
+def unbury_cards_for_current_deck():
+    current_deck_id = get_collection().decks.get_current_id()
+    get_collection().sched.unbury_deck(current_deck_id)
 
 
 def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
@@ -285,36 +307,3 @@ def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
 
             raise Exception("Reviewer didn't show some of the expected cards: \n"
                             f"{card_info}")
-
-
-@contextmanager
-def current_deck_preserved():
-    current_deck_id = get_collection().decks.get_current_id()
-    yield
-    get_collection().decks.set_current(current_deck_id)
-
-
-def create_filtered_deck(search_string) -> int:
-    search_term = FilteredDeckConfig.SearchTerm(
-        search=search_string,
-        limit=100,
-        order=0,  # random
-    )
-
-    with current_deck_preserved():
-        filtered_deck = get_collection().sched.get_or_create_filtered_deck(DeckId(0))
-        del filtered_deck.config.search_terms[:]
-        filtered_deck.config.search_terms.append(search_term)
-        return get_collection().sched.add_or_update_filtered_deck(filtered_deck).id
-
-
-@contextmanager
-def filtered_deck_created(search_string):
-    deck_id = create_filtered_deck(search_string)
-    yield deck_id
-    get_collection().decks.remove([deck_id])
-
-
-def show_deck_overview(deck_id):
-    get_collection().decks.set_current(deck_id)
-    aqt.mw.moveToState("overview")
