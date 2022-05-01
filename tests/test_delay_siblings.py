@@ -4,7 +4,7 @@ import aqt
 import pytest
 
 from tests.conftest import try_with_all_schedulers
-from tests.anki_helpers import (
+from tests.anki_tools import (
     EASY,
     DO_NOT_ANSWER,
     do_some_historic_reviews,

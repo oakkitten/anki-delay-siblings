@@ -10,7 +10,7 @@ from _pytest.monkeypatch import MonkeyPatch  # noqa
 from pytest_anki._launch import anki_running, temporary_user  # noqa
 from waitress import wasyncore
 
-from tests.anki_helpers import anki_version, get_collection, get_deck_ids, \
+from tests.anki_tools import anki_version, get_collection, get_deck_ids, \
     get_model_ids, create_model, CardDescription, create_deck, add_note, set_scheduler
 
 try:
