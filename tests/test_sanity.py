@@ -14,10 +14,7 @@ from tests.anki_helpers import (
     CardInfo, )
 
 
-@try_with_all_schedulers
-def test_addon_has_no_effect_if_not_enabled(setup):
-    import delay_siblings  # noqa
-
+def review_some_cards_in_0_5_10_days(setup):
     card1_id, card2_id = setup.note1_card_ids
 
     do_some_historic_reviews({
@@ -26,117 +23,114 @@ def test_addon_has_no_effect_if_not_enabled(setup):
         10: {card1_id: EASY, card2_id: EASY},
     })
 
-    card2_old_due = get_card(card2_id).due
+
+def review_note1_card1_in_20_days(setup):
+    card1_id, _ = setup.note1_card_ids
 
     do_some_historic_reviews({
         20: {card1_id: DO_NOT_ANSWER},
     })
 
+
+########################################################################################
+
+
+@try_with_all_schedulers
+def test_addon_has_no_effect_if_not_enabled(setup):
+    card1_id, card2_id = setup.note1_card_ids
+
+    review_some_cards_in_0_5_10_days(setup)
+    card2_old_due = get_card(card2_id).due
+
+    review_note1_card1_in_20_days(setup)
     card2_new_due = get_card(card2_id).due
+
     assert card2_old_due == card2_new_due
 
 
 @try_with_all_schedulers
 def test_addon_changes_one_card_due_if_enabled(setup):
-    import delay_siblings
-
     card1_id, card2_id = setup.note1_card_ids
 
-    do_some_historic_reviews({
-        0: {card1_id: EASY, card2_id: EASY},
-        5: {card1_id: EASY, card2_id: EASY},
-        10: {card1_id: EASY, card2_id: EASY},
-    })
-
+    review_some_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(card2_id).due
 
-    delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.current_deck.enabled = True
 
-    do_some_historic_reviews({
-        20: {card1_id: DO_NOT_ANSWER},
-    })
-
+    review_note1_card1_in_20_days(setup)
     card2_new_due = get_card(card2_id).due
+
     assert card2_old_due != card2_new_due
 
 
 @try_with_all_schedulers
 def test_addon_changes_one_card_due_in_a_filtered_deck(setup):
-    import delay_siblings
-
     card1_id, card2_id = setup.note1_card_ids
 
-    do_some_historic_reviews({
-        0: {card1_id: EASY, card2_id: EASY},
-        5: {card1_id: EASY, card2_id: EASY},
-        10: {card1_id: EASY, card2_id: EASY},
-    })
-
+    review_some_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(card2_id).due
 
     with filtered_deck_created(f"cid:{card2_id}"):
         show_deck_overview(setup.deck_id)
-        delay_siblings.config.current_deck.enabled = True
-
-        do_some_historic_reviews({
-            20: {card1_id: DO_NOT_ANSWER},
-        })
+        setup.delay_siblings.config.current_deck.enabled = True
+        review_note1_card1_in_20_days(setup)
 
     card2_new_due = get_card(card2_id).due
+
     assert card2_old_due != card2_new_due
 
 
 @try_with_all_schedulers
 def test_addon_changes_one_card_due_when_ran_in_a_filtered_deck(setup):
-    import delay_siblings
-
     card1_id, card2_id = setup.note1_card_ids
 
-    do_some_historic_reviews({
-        0: {card1_id: EASY, card2_id: EASY},
-        5: {card1_id: EASY, card2_id: EASY},
-        10: {card1_id: EASY, card2_id: EASY},
-    })
-
+    review_some_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(card2_id).due
 
     with filtered_deck_created(f"cid:{card1_id}") as filtered_deck_id:
         show_deck_overview(filtered_deck_id)
-        delay_siblings.config.current_deck.enabled = True
-
-        do_some_historic_reviews({
-            20: {card1_id: DO_NOT_ANSWER},
-        })
+        setup.delay_siblings.config.current_deck.enabled = True
+        review_note1_card1_in_20_days(setup)
 
     card2_new_due = get_card(card2_id).due
+
     assert card2_old_due != card2_new_due
 
 
 @try_with_all_schedulers
-def test_new_due_falls_within_change_range(setup):
-    import delay_siblings
-
+def test_new_due_falls_within_calculated_range(setup):
     card1_id, card2_id = setup.note1_card_ids
-
-    do_some_historic_reviews({
-        0: {card1_id: EASY, card2_id: EASY},
-        5: {card1_id: EASY, card2_id: EASY},
-        10: {card1_id: EASY, card2_id: EASY},
-    })
+    review_some_cards_in_0_5_10_days(setup)
 
     card2_info = CardInfo.from_card(get_card(card2_id))
     card2_interval = card2_info.reviews[-1].interval
     new_due_min, new_due_max = \
-        delay_siblings.calculate_new_relative_due_range(card2_interval, 2)
+        setup.delay_siblings.calculate_new_relative_due_range(card2_interval, 2)
 
-    delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.current_deck.enabled = True
 
-    do_some_historic_reviews({
-        20: {card1_id: DO_NOT_ANSWER},
-    })
-
+    review_note1_card1_in_20_days(setup)
     card2_new_due = get_card(card2_id).due
+
     assert new_due_min <= card2_new_due - 20 <= new_due_max
+
+
+@try_with_all_schedulers
+def test_card_gets_removed_from_review_queue(setup):
+    card1_id, card2_id = setup.note1_card_ids
+    review_some_cards_in_0_5_10_days(setup)
+
+    setup.delay_siblings.config.current_deck.enabled = True
+
+    review_note1_card1_in_20_days(setup)
+
+    with pytest.raises(Exception, match=f"(?s)didn't show.*id: {card2_id}"):
+        do_some_historic_reviews({
+            20: {card2_id: EASY},
+        })
+
+
+########################################################################################
 
 
 @pytest.mark.parametrize(
@@ -150,61 +144,26 @@ def test_new_due_falls_within_change_range(setup):
         (16, 3, (2, 3)),
         (360, 2, (28, 37)),
         (360, 3, (19, 24)),
-    ]
+    ],
+    ids=lambda argument: repr(argument)
 )
 def test_new_due_range_function(setup, interval, cards_per_note, result):
-    from delay_siblings import calculate_new_relative_due_range
-
-    assert calculate_new_relative_due_range(interval, cards_per_note) == result
+    assert setup.delay_siblings \
+               .calculate_new_relative_due_range(interval, cards_per_note) == result
 
 
 @try_with_all_schedulers
-@pytest.mark.parametrize("quiet", [False, True])
+@pytest.mark.parametrize("quiet", [False, True], ids=["not quiet", "quiet"])
 def test_tooltip_not_called_if_quiet(setup, quiet, monkeypatch):
-    import delay_siblings
+    monkeypatch.setattr(setup.delay_siblings, "tooltip", MagicMock())
+    review_some_cards_in_0_5_10_days(setup)
 
-    monkeypatch.setattr(delay_siblings, "tooltip", MagicMock())
+    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.current_deck.quiet = quiet
 
-    card1_id, card2_id = setup.note1_card_ids
+    review_note1_card1_in_20_days(setup)
 
-    do_some_historic_reviews({
-        0: {card1_id: EASY, card2_id: EASY},
-        5: {card1_id: EASY, card2_id: EASY},
-        10: {card1_id: EASY, card2_id: EASY},
-    })
-
-    delay_siblings.config.current_deck.enabled = True
-    delay_siblings.config.current_deck.quiet = quiet
-
-    do_some_historic_reviews({
-        20: {card1_id: DO_NOT_ANSWER},
-    })
-
-    assert delay_siblings.tooltip.call_count == (0 if quiet else 1)  # noqa
-
-
-@try_with_all_schedulers
-def test_card_gets_removed_from_review_queue(setup):
-    import delay_siblings  # noqa
-
-    card1_id, card2_id = setup.note1_card_ids
-
-    do_some_historic_reviews({
-        0: {card1_id: EASY, card2_id: EASY},
-        5: {card1_id: EASY, card2_id: EASY},
-        10: {card1_id: EASY, card2_id: EASY},
-    })
-
-    delay_siblings.config.current_deck.enabled = True
-
-    do_some_historic_reviews({
-        20: {card1_id: DO_NOT_ANSWER}
-    })
-
-    with pytest.raises(Exception, match=f"(?s)didn't show.*id: {card2_id}"):
-        do_some_historic_reviews({
-            20: {card2_id: EASY},
-        })
+    assert setup.delay_siblings.tooltip.call_count == (0 if quiet else 1)  # noqa
 
 
 def test_menus_get_disabled_enabled(setup):

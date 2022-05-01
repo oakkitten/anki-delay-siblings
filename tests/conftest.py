@@ -133,6 +133,7 @@ def current_decks_and_models_etc_preserved():
 
 @dataclass
 class Setup:
+    delay_siblings: "delay_siblings"
     model_id: int
     deck_id: int
     note1_id: int
@@ -174,7 +175,10 @@ def set_up_test_deck_and_test_model_and_two_notes():
 
     get_collection().decks.set_current(deck_id)
 
+    import delay_siblings
+
     return Setup(
+        delay_siblings=delay_siblings,
         model_id=model_id,
         deck_id=deck_id,
         note1_id=note1_id,
