@@ -9,10 +9,13 @@ import aqt
 from _pytest.monkeypatch import MonkeyPatch
 from anki.cards import Card
 from anki.collection import Collection
+from anki.decks import DeckId, FilteredDeckConfig
 from anki.notes import Note
 from anki.utils import strip_html
 
 anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
+
+say = print
 
 
 def get_collection() -> Collection:
@@ -34,7 +37,8 @@ class CardDescription:
     back: str
 
 
-def create_model(model_name: str, field_names: Sequence[str], card_descriptions: Sequence[CardDescription]) -> int:
+def create_model(model_name: str, field_names: Sequence[str],
+                 card_descriptions: Sequence[CardDescription]) -> int:
     models = get_collection().models
     model = models.new(model_name)
 
@@ -55,7 +59,8 @@ def create_deck(deck_name: str) -> int:
     return get_collection().decks.id(deck_name)
 
 
-def add_note(model_name: str, deck_name: str, fields: dict[str, str], tags: Sequence[str] = None) -> int:
+def add_note(model_name: str, deck_name: str, fields: dict[str, str],
+             tags: Sequence[str] = None) -> int:
     collection = get_collection()
 
     model_id = collection.models.id_for_name(model_name)
@@ -92,7 +97,8 @@ def clock_changed_to(epoch_seconds: float):
 
     with MonkeyPatch().context() as monkey:
         monkey.setattr(time, "time", lambda: epoch_seconds)
-        monkey.setattr(get_collection().sched.__class__, "today", aqt.mw.col.sched.today + days_delta)
+        monkey.setattr(get_collection().sched.__class__, "today",
+                       aqt.mw.col.sched.today + days_delta)
         yield
 
 
@@ -249,3 +255,36 @@ def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
             )
             raise Exception("Reviewer didn't show some of the expected cards: \n"
                             f"{card_info}")
+
+
+@contextmanager
+def current_deck_preserved():
+    current_deck_id = get_collection().decks.get_current_id()
+    yield
+    get_collection().decks.set_current(current_deck_id)
+
+
+def create_filtered_deck(search_string) -> int:
+    search_term = FilteredDeckConfig.SearchTerm(
+        search=search_string,
+        limit=100,
+        order=0,  # random
+    )
+
+    with current_deck_preserved():
+        filtered_deck = get_collection().sched.get_or_create_filtered_deck(DeckId(0))
+        del filtered_deck.config.search_terms[:]
+        filtered_deck.config.search_terms.append(search_term)
+        return get_collection().sched.add_or_update_filtered_deck(filtered_deck).id
+
+
+@contextmanager
+def filtered_deck_created(search_string):
+    deck_id = create_filtered_deck(search_string)
+    yield deck_id
+    get_collection().decks.remove([deck_id])
+
+
+def show_deck_overview(deck_id):
+    get_collection().decks.set_current(deck_id)
+    aqt.mw.moveToState("overview")
