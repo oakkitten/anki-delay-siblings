@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import aqt
 import pytest
 
 from tests.anki_helpers import (
@@ -197,3 +198,36 @@ def test_card_gets_removed_from_review_queue(setup):
         do_some_historic_reviews({
             0: {card2_id: EASY},
         })
+
+
+def test_menus_get_disabled_enabled(setup):
+    import delay_siblings
+
+    def get_menu_status():
+        return (
+            delay_siblings.menu_enabled.isEnabled(),
+            delay_siblings.menu_enabled.isChecked(),
+            delay_siblings.menu_quiet.isEnabled(),
+            delay_siblings.menu_quiet.isChecked(),
+        )
+
+    aqt.mw.moveToState("deckBrowser")
+    assert get_menu_status() == (False, False, False, False)
+
+    aqt.mw.moveToState("overview")
+    assert get_menu_status() == (True, False, False, False)
+
+    delay_siblings.menu_enabled.trigger()
+    assert get_menu_status() == (True, True, True, False)
+
+    delay_siblings.menu_quiet.trigger()
+    assert get_menu_status() == (True, True, True, True)
+
+    aqt.mw.moveToState("deckBrowser")
+    assert get_menu_status() == (False, False, False, False)
+
+    aqt.mw.moveToState("overview")
+    assert get_menu_status() == (True, True, True, True)
+    assert delay_siblings.config.current_deck.enabled is True
+    assert delay_siblings.config.current_deck.quiet is True
+
