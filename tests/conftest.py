@@ -279,6 +279,8 @@ def session_with_profile_loaded(session_scope_empty_session, request):
             yield session
 
 
+# Yielding gets rid of the Qt warning somehow:
+#   Window should have been closed: <PyQt6.QtWidgets.QWidget object at 0x7f36e4169360>
 @pytest.fixture
 def setup(session_with_profile_loaded):
     """
@@ -292,3 +294,4 @@ def setup(session_with_profile_loaded):
     """
     yield set_up_test_deck_and_test_model_and_two_notes()
     close_all_dialogs_and_wait_for_them_to_run_closing_callbacks()
+    wait(0)
