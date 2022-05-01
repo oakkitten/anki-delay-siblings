@@ -11,7 +11,7 @@ from pytest_anki._launch import anki_running, temporary_user  # noqa
 from waitress import wasyncore
 
 from tests.anki_helpers import anki_version, get_collection, get_deck_ids, \
-    get_model_ids, create_model, CardDescription, create_deck, add_note
+    get_model_ids, create_model, CardDescription, create_deck, add_note, set_scheduler
 
 try:
     from PyQt6 import QtTest
@@ -234,6 +234,21 @@ def pytest_generate_tests(metafunc):
         and session_scope_empty_session.__name__ not in metafunc.fixturenames
     ):
         metafunc.fixturenames.remove(run_background_tasks_on_main_thread.__name__)
+
+
+@pytest.fixture(autouse=True)
+def scheduler(request, setup):
+    if not hasattr(request, "param"):
+        return
+    version = request.param
+    assert version in [2, 3]
+    set_scheduler(version)
+
+try_with_all_schedulers = pytest.mark.parametrize(
+    "scheduler",
+    [2, 3],
+    ids=["v2 scheduler", "v3 scheduler"],
+    indirect=True)
 
 
 @pytest.fixture(scope="session")

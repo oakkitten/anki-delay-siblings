@@ -1,19 +1,20 @@
-import datetime
-import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from textwrap import dedent
 from typing import Sequence
 
 import aqt
-from _pytest.monkeypatch import MonkeyPatch
+import libfaketime  # noqa  (n/a on windows)
 from anki.cards import Card
-from anki.collection import Collection
+from anki.collection import Collection, V2Scheduler, V3Scheduler
 from anki.decks import DeckId, FilteredDeckConfig
 from anki.notes import Note
 from anki.utils import strip_html
 
+
 anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
+
 
 say = print
 
@@ -80,8 +81,12 @@ def add_note(model_name: str, deck_name: str, fields: dict[str, str],
 def set_scheduler(version: int):
     if version == 2:
         get_collection().set_v3_scheduler(enabled=False)
-    if version == 3:
+        assert isinstance(get_collection().sched, V2Scheduler)
+    elif version == 3:
         get_collection().set_v3_scheduler(enabled=True)
+        assert isinstance(get_collection().sched, V3Scheduler)
+    else:
+        raise ValueError(f"Bad scheduler version: {version}")
 
 
 def get_card(card_id: int) -> Card:
@@ -91,26 +96,28 @@ def get_card(card_id: int) -> Card:
 ################################################################################ reviews
 
 
+# this changes clock for both Python and Rust by doing some C magic
+# libfaketime needs to be preloaded by the dynamic linker;
+# this can be done by running the following before the tests:
+#   $ eval $(python-libfaketime)
+# clock can only be set forward due to the way Anki's Rust backend handles deck time:
+# it calls `elapsed()`, which returns 0 if clock went backwards
 @contextmanager
-def clock_changed_to(epoch_seconds: float):
-    days_delta = datetime.timedelta(seconds=epoch_seconds - time.time()).days
+def clock_set_forward_by(**kwargs):
+    delta = timedelta(**kwargs)
 
-    with MonkeyPatch().context() as monkey:
-        monkey.setattr(time, "time", lambda: epoch_seconds)
-        monkey.setattr(get_collection().sched.__class__, "today",
-                       aqt.mw.col.sched.today + days_delta)
+    if delta < timedelta(0):
+        raise Exception(f"Can't set clock backwards ({delta=})")
+
+    with libfaketime.fake_time(datetime.now() + delta):
         yield
 
 
-def seconds_to_minutes(n):
-    return n * 60
-
-
-def seconds_to_days(n):
+def days_to_seconds(n):
     return n * 24 * 60 * 60
 
 
-def reviewer_reset():
+def reset_window_to_review_state():
     aqt.mw.moveToState("overview")
     aqt.mw.moveToState("review")
     assert aqt.mw.state == "review"
@@ -124,8 +131,13 @@ def reviewer_show_answer():
     aqt.mw.reviewer._showAnswer()
 
 
-def reviewer_show_next_card():
-    aqt.mw.reviewer.nextCard()
+def reviewer_bury_current_card():
+    aqt.mw.reviewer.bury_current_card()
+
+
+def unbury_cards_for_current_deck():
+    current_deck_id = get_collection().decks.get_current_id()
+    get_collection().sched.unbury_deck(current_deck_id)
 
 
 DO_NOT_ANSWER = -1
@@ -166,7 +178,7 @@ class Review:
 
         answer = {0: "again", 1: "hard", 2: "good", 3: "easy"}[self.button_chosen]
 
-        date = datetime.datetime.fromtimestamp(self.id / 1000)
+        date = datetime.fromtimestamp(self.id / 1000)
         date_str = date.strftime("%b %d %H:%M")
 
         old_interval = interval_to_string(self.last_interval)
@@ -174,7 +186,7 @@ class Review:
 
         ease = self.ease / 10
 
-        due = date + datetime.timedelta(days=interval_to_days(self.interval))
+        due = date + timedelta(days=interval_to_days(self.interval))
         due_str = due.strftime("%b %d")
 
         return f"{answer} @ {date_str} [{old_interval} -> {new_interval}, {ease:n}%, due @ {due_str}]"
@@ -219,40 +231,58 @@ class CardInfo:
         """)
 
 
+def say_card(card_or_card_id: Card | int):
+    if isinstance(card_or_card_id, int):
+        card_or_card_id = get_card(card_or_card_id)
+    say(CardInfo.from_card(card_or_card_id).to_string())
+
+
 def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
-    now = time.time()
+    say(f":: doing some historic reviews")
 
     for days, ids_to_answers in days_to_ids_to_answers.items():
-        extra_seconds = 0
-        reviewer_reset()
+        say(f":: @ {days} days :: {ids_to_answers}")
 
-        while aqt.mw.state == "review":
-            extra_seconds += 1
+        with clock_set_forward_by(days=days):
+            extra_minutes = 0
+            reset_window_to_review_state()
 
-            if extra_seconds > 10:
-                break  # we are going in circles
+            while aqt.mw.state == "review":
+                extra_minutes += 1
 
-            with clock_changed_to(now + seconds_to_days(days) + extra_seconds):
-                reviewer_show_question()
+                # we are probably going in circles, break to raise the exception
+                if extra_minutes > 10:
+                    break
 
-                try:
-                    card = reviewer_get_current_card()
-                    answer = ids_to_answers.pop(card.id)
-                except KeyError:
-                    reviewer_show_next_card()
-                else:
-                    reviewer_show_answer()
-                    if answer != DO_NOT_ANSWER:
-                        reviewer_answer_card(answer)
+                # change time, as review id is the timestamp and must be unique
+                with clock_set_forward_by(minutes=extra_minutes):
+                    reviewer_show_question()
 
-            if not ids_to_answers:
-                break
+                    try:
+                        card = reviewer_get_current_card()
+                        answer = ids_to_answers.pop(card.id)
+                    except KeyError:
+                        say(f":: {card.id} -> skipping")
+                        reviewer_bury_current_card()
+                    else:
+                        say(f":: {card.id} -> answering with {answer}"
+                            .replace("answering with -1", "only showing"))
+
+                        reviewer_show_answer()
+                        if answer != DO_NOT_ANSWER:
+                            reviewer_answer_card(answer)
+
+                if not ids_to_answers:
+                    break
+
+            unbury_cards_for_current_deck()
 
         if ids_to_answers:
             card_info = "\n".join(
                 CardInfo.from_card(get_card(card_id)).to_string()
                 for card_id in ids_to_answers.keys()
             )
+
             raise Exception("Reviewer didn't show some of the expected cards: \n"
                             f"{card_info}")
 
