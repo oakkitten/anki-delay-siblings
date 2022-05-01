@@ -1,3 +1,4 @@
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -14,6 +15,7 @@ from anki.notes import Note
 from anki.scheduler.base import SchedulerBase
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from aqt.main import MainWindowState
+
 
 anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
 
@@ -215,24 +217,18 @@ def show_deck_overview(deck_id):
     move_main_window_to_state("overview")
 
 
-################################################################################ reviews
+############################################################################ time travel
 
 
-def set_scheduler(version: int):
-    if version == 2:
-        get_collection().set_v3_scheduler(enabled=False)
-        assert isinstance(get_scheduler(), V2Scheduler)
-    elif version == 3:
-        get_collection().set_v3_scheduler(enabled=True)
-        assert isinstance(get_scheduler(), V3Scheduler)
-    else:
-        raise ValueError(f"Bad scheduler version: {version}")
+if os.environ.get("FAKETIME_DID_REEXEC") != "true":
+    raise Exception(
+        "Module `libfaketime` needs to be preloaded by the dynamic linker.\n"
+        "If running from console, you can run the following "
+        "to set the necessary environmental variables:\n"
+        "  $ eval $(python-libfaketime)"
+    )
 
 
-# this changes clock for both Python and Rust by doing some C magic.
-# libfaketime needs to be preloaded by the dynamic linker;
-# this can be done by running the following before the tests:
-#   $ eval $(python-libfaketime)
 # clock can only be set forward due to the way Anki's Rust backend handles deck time:
 # it calls `elapsed()`, which returns 0 if clock went backwards.
 #
@@ -250,6 +246,20 @@ def clock_set_forward_by(**kwargs):
 
     with libfaketime.fake_time(datetime.now() + delta):
         yield
+
+
+################################################################################ reviews
+
+
+def set_scheduler(version: int):
+    if version == 2:
+        get_collection().set_v3_scheduler(enabled=False)
+        assert isinstance(get_scheduler(), V2Scheduler)
+    elif version == 3:
+        get_collection().set_v3_scheduler(enabled=True)
+        assert isinstance(get_scheduler(), V3Scheduler)
+    else:
+        raise ValueError(f"Bad scheduler version: {version}")
 
 
 def reset_window_to_review_state():
