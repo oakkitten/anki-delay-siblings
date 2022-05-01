@@ -11,7 +11,8 @@ from tests.anki_helpers import (
     get_card,
     filtered_deck_created,
     show_deck_overview,
-    CardInfo, )
+    CardInfo,
+)
 
 
 def review_cards_in_0_5_10_days(setup):

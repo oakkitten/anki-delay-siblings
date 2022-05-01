@@ -21,9 +21,9 @@ anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
 say = print
 
 def say_card(card_or_card_id: Card | int):
-    if isinstance(card_or_card_id, int):
-        card_or_card_id = get_card(card_or_card_id)
-    say(CardInfo.from_card(card_or_card_id).to_string())
+    card = get_card(card_or_card_id) if isinstance(card_or_card_id, int) else card_or_card_id
+    card.load()
+    say(CardInfo.from_card(card).to_string())
 
 
 ############################################################################## get stuff
@@ -39,7 +39,7 @@ def get_model_ids() -> list[int]:
     return [item.id for item in get_collection().models.all_names_and_ids()]
 
 def get_card(card_id: int) -> Card:
-    return aqt.mw.col.get_card(card_id)
+    return get_collection().get_card(card_id)
 
 
 @dataclass
@@ -72,7 +72,7 @@ class Review:
         ease = self.ease / 10
 
         due = date + timedelta(days=interval_to_days(self.interval))
-        due_str = due.strftime("%b %d")
+        due_str = due.strftime("%b %d" if self.interval >= 0 else "%b %d %H:%M")
 
         return f"{answer} @ {date_str} [{old_interval} -> {new_interval}, {ease:n}%, due @ {due_str}]"
 
@@ -102,6 +102,13 @@ class CardInfo:
         )
 
     def to_string(self) -> str:
+        if self.due > 1000000:
+            due_str = datetime.fromtimestamp(self.due).strftime("%b %d %H:%M")
+        else:
+            due_rel = self.due - get_collection().sched.today
+            due_date_str = (datetime.now() + timedelta(days=self.due)).strftime("%b %d")
+            due_str = f"in {due_rel} days, {due_date_str}"
+
         reviews_str = "\n                  ".join(
             review.to_string() for review in self.reviews
         )
@@ -110,7 +117,7 @@ class CardInfo:
               id: {self.id}
         question: {self.question}
           answer: {self.answer}
-             due: {self.due}
+             due: {self.due} ({due_str})
          reviews: {reviews_str}
         """)
 
@@ -214,7 +221,13 @@ def set_scheduler(version: int):
 # this can be done by running the following before the tests:
 #   $ eval $(python-libfaketime)
 # clock can only be set forward due to the way Anki's Rust backend handles deck time:
-# it calls `elapsed()`, which returns 0 if clock went backwards
+# it calls `elapsed()`, which returns 0 if clock went backwards.
+#
+# EXTREME CAUTION: Rust backend usually regenerates scheduler “today” via current time,
+# but it stores the last result and will return it instead if is more “recent”.
+# this means that “today”, at least as seen from python, can't go backwards!
+# on the other hand, it seems that this does not affect answering cards in reviewer.
+# see rslib/src/scheduler/mod.rs -> `impl Collection` -> `fn scheduler_info`
 @contextmanager
 def clock_set_forward_by(**kwargs):
     delta = timedelta(**kwargs)
@@ -284,12 +297,11 @@ def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
                         card = reviewer_get_current_card()
                         answer = ids_to_answers.pop(card.id)
                     except KeyError:
-                        say(f":: {card.id} -> skipping")
+                        say(f":: :: {card.id} -> skipping")
                         reviewer_bury_current_card()
                     else:
-                        say(f":: {card.id} -> answering with {answer}"
+                        say(f":: :: {card.id} -> answering with {answer}"
                             .replace("answering with -1", "only showing"))
-
                         reviewer_show_answer()
                         if answer != DO_NOT_ANSWER:
                             reviewer_answer_card(answer)
