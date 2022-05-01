@@ -136,11 +136,9 @@ class Setup:
     delay_siblings: "delay_siblings"
     model_id: int
     deck_id: int
-    note1_id: int
-    note2_id: int
-    note1_card_ids: "list[int]"
-    note2_card_ids: "list[int]"
-    card_ids: "list[int]"
+    note_id: int
+    card1_id: int
+    card2_id: int
 
 
 def set_up_test_deck_and_test_model_and_two_notes():
@@ -155,23 +153,14 @@ def set_up_test_deck_and_test_model_and_two_notes():
 
     deck_id = create_deck("test_deck")
 
-    note1_id = add_note(
+    note_id = add_note(
         model_name="test_model",
         deck_name="test_deck",
         fields={"field1": "note1 field1", "field2": "note1 field2"},
         tags=["tag1"],
     )
 
-    note2_id = add_note(
-        model_name="test_model",
-        deck_name="test_deck",
-        fields={"field1": "note2 field1", "field2": "note2 field2"},
-        tags=["tag2"],
-    )
-
-    note1_card_ids = get_collection().find_cards(query=f"nid:{note1_id}")
-    note2_card_ids = get_collection().find_cards(query=f"nid:{note2_id}")
-    card_ids = get_collection().find_cards(query="deck:test_deck")
+    card_ids = get_collection().find_cards(query=f"nid:{note_id}")
 
     get_collection().decks.set_current(deck_id)
 
@@ -181,11 +170,9 @@ def set_up_test_deck_and_test_model_and_two_notes():
         delay_siblings=delay_siblings,
         model_id=model_id,
         deck_id=deck_id,
-        note1_id=note1_id,
-        note2_id=note2_id,
-        note1_card_ids=list(note1_card_ids),
-        note2_card_ids=list(note2_card_ids),
-        card_ids=list(card_ids),
+        note_id=note_id,
+        card1_id=card_ids[0],
+        card2_id=card_ids[1],
     )
 
 
@@ -300,8 +287,7 @@ def setup(session_with_profile_loaded):
         * A deck `test_deck`
         * A model `test_model` with fields `filed1` and `field2`
           and two cards per note
-        * Two notes with two valid cards each using the above deck and model
-      * Edit dialog is registered with dialog manager
+        * One notes with two valid cards each using the above deck and model
       * Any dialogs, if open, are safely closed on exit
     """
     yield set_up_test_deck_and_test_model_and_two_notes()
