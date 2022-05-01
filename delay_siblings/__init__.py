@@ -33,9 +33,8 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from anki.cards import Card
-from anki.utils import strip_html
+from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from anki.consts import QUEUE_TYPE_SUSPENDED, CARD_TYPE_REV as CARD_TYPE_REVIEWING
-
 from aqt.qt import QAction
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
@@ -105,7 +104,7 @@ def remove_card_from_current_review_queue(card: Card):
 
 
 # see https://github.com/ankitects/anki/blob/6ecf2ffa/pylib/anki/sched.py#L985-L986
-def get_siblings(card: Card) -> list[Card]:
+def get_siblings(card: Card) -> "list[Card]":
     card_ids = card.col.db.list("select id from cards where nid=? and id!=?",
                                 card.nid, card.id)
     return [mw.col.get_card(card_id) for card_id in card_ids]
@@ -118,7 +117,7 @@ class Reschedule:
     new_absolute_due: int
 
 
-def get_pending_sibling_reschedules(card: Card) -> list[Reschedule]:
+def get_pending_sibling_reschedules(card: Card) -> "list[Reschedule]":
     today = get_today()
     siblings = get_siblings(card)
     cards_per_note = len(siblings) + 1
@@ -176,21 +175,20 @@ ENABLED = "enabled"
 QUIET = "quiet"
 
 
+def make_property(name):
+    def getter(self):
+        return self.deck_data[name]
+
+    def setter(self, value):
+        self.deck_data[name] = value
+        self.config.save()
+
+    return property(getter, setter)
+
 class DeckConfig:
     def __init__(self, cfg, deck_id):
         self.config = cfg
         self.deck_data = cfg.data.setdefault(str(deck_id), {ENABLED: False, QUIET: False})
-
-    @staticmethod
-    def make_property(name):
-        def getter(self):
-            return self.deck_data[name]
-
-        def setter(self, value):
-            self.deck_data[name] = value
-            self.config.save()
-
-        return property(getter, setter)
 
     enabled = make_property(ENABLED)
     quiet = make_property(QUIET)

@@ -12,7 +12,7 @@ from anki.decks import DeckId, FilteredDeckConfig, DeckManager
 from anki.models import ModelManager
 from anki.notes import Note
 from anki.scheduler.base import SchedulerBase
-from anki.utils import strip_html
+from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from aqt.main import MainWindowState
 
 anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
@@ -22,7 +22,7 @@ anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
 #   $ python -m pytest -s
 say = print
 
-def say_card(card_or_card_id: Card | int):
+def say_card(card_or_card_id: "Card | int"):
     card = get_card(card_or_card_id) if isinstance(card_or_card_id, int) else card_or_card_id
     card.load()
     say(CardInfo.from_card(card).to_string())
@@ -43,10 +43,10 @@ def get_decks() -> DeckManager:
 def get_scheduler() -> SchedulerBase:
     return get_collection().sched
 
-def get_all_deck_ids() -> list[int]:
+def get_all_deck_ids() -> "list[int]":
     return [item.id for item in get_decks().all_names_and_ids()]
 
-def get_all_model_ids() -> list[int]:
+def get_all_model_ids() -> "list[int]":
     return [item.id for item in get_models().all_names_and_ids()]
 
 def get_card(card_id: int) -> Card:
@@ -169,7 +169,7 @@ def create_deck(deck_name: str) -> int:
     return get_decks().id(deck_name)
 
 
-def add_note(model_name: str, deck_name: str, fields: dict[str, str],
+def add_note(model_name: str, deck_name: str, fields: "dict[str, str]",
              tags: Sequence[str] = None) -> int:
     model_id = get_models().id_for_name(model_name)
     deck_id = get_decks().id_for_name(deck_name)
@@ -285,7 +285,7 @@ def unbury_cards_for_current_deck():
     get_scheduler().unbury_deck(current_deck_id)
 
 
-def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):
+def do_some_historic_reviews(days_to_ids_to_answers: "dict[int, dict[int, int]]"):
     say(f":: doing some historic reviews")
 
     for days, ids_to_answers in days_to_ids_to_answers.items():
