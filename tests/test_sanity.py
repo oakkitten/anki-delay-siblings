@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from tests.anki_helpers import (
@@ -148,3 +150,27 @@ def test_new_due_range_function(setup, interval, cards_per_note, result):
     from delay_siblings import calculate_new_relative_due_range
 
     assert calculate_new_relative_due_range(interval, cards_per_note) == result
+
+
+@pytest.mark.parametrize("quiet", [False, True])
+def test_tooltip_not_called_if_quiet(setup, quiet, monkeypatch):
+    import delay_siblings
+
+    monkeypatch.setattr(delay_siblings, "tooltip", MagicMock())
+
+    card1_id, card2_id = setup.note1_card_ids
+
+    do_some_historic_reviews({
+        -20: {card1_id: EASY, card2_id: EASY},
+        -15: {card1_id: EASY, card2_id: EASY},
+        -10: {card1_id: EASY, card2_id: EASY},
+    })
+
+    delay_siblings.config.current_deck.enabled = True
+    delay_siblings.config.current_deck.quiet = quiet
+
+    do_some_historic_reviews({
+        0: {card1_id: DO_NOT_ANSWER},
+    })
+
+    assert delay_siblings.tooltip.call_count == (0 if quiet else 1)  # noqa
