@@ -222,11 +222,11 @@ def flip_quiet(_key):
     config.current_deck.quiet = not config.current_deck.quiet
 
 
-menu_enabled = QAction("Enable sibling delaying",
+menu_enabled = QAction("Enable sibling delaying",  # noqa
                        mw, checkable=True, enabled=False)  # noqa
 menu_enabled.triggered.connect(flip_enabled)  # noqa
 
-menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks",
+menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks",  # noqa
                      mw, checkable=True, enabled=False)  # noqa
 menu_quiet.triggered.connect(flip_quiet)  # noqa
 

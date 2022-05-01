@@ -17,6 +17,7 @@ from tests.anki_tools import (
     reviewer_show_question,
     reviewer_show_answer,
     reviewer_answer_card,
+    move_main_window_to_state,
 )
 
 
@@ -175,10 +176,10 @@ def test_menus_get_disabled_enabled(setup):
             delay_siblings.menu_quiet.isChecked(),
         )
 
-    aqt.mw.moveToState("deckBrowser")
+    move_main_window_to_state("deckBrowser")
     assert get_menu_status() == (False, False, False, False)
 
-    aqt.mw.moveToState("overview")
+    move_main_window_to_state("overview")
     assert get_menu_status() == (True, False, False, False)
 
     delay_siblings.menu_enabled.trigger()
@@ -187,10 +188,10 @@ def test_menus_get_disabled_enabled(setup):
     delay_siblings.menu_quiet.trigger()
     assert get_menu_status() == (True, True, True, True)
 
-    aqt.mw.moveToState("deckBrowser")
+    move_main_window_to_state("deckBrowser")
     assert get_menu_status() == (False, False, False, False)
 
-    aqt.mw.moveToState("overview")
+    move_main_window_to_state("overview")
     assert get_menu_status() == (True, True, True, True)
     assert delay_siblings.config.current_deck.enabled is True
     assert delay_siblings.config.current_deck.quiet is True

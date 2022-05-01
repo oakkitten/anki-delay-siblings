@@ -8,10 +8,12 @@ import aqt
 import libfaketime  # noqa  (n/a on windows)
 from anki.cards import Card
 from anki.collection import Collection, V2Scheduler, V3Scheduler
-from anki.decks import DeckId, FilteredDeckConfig
+from anki.decks import DeckId, FilteredDeckConfig, DeckManager
+from anki.models import ModelManager
 from anki.notes import Note
+from anki.scheduler.base import SchedulerBase
 from anki.utils import strip_html
-
+from aqt.main import MainWindowState
 
 anki_version = tuple(int(segment) for segment in aqt.appVersion.split("."))
 
@@ -32,14 +34,27 @@ def say_card(card_or_card_id: Card | int):
 def get_collection() -> Collection:
     return aqt.mw.col
 
-def get_deck_ids() -> list[int]:
-    return [item.id for item in get_collection().decks.all_names_and_ids()]
+def get_models() -> ModelManager:
+    return get_collection().models
 
-def get_model_ids() -> list[int]:
-    return [item.id for item in get_collection().models.all_names_and_ids()]
+def get_decks() -> DeckManager:
+    return get_collection().decks
+
+def get_scheduler() -> SchedulerBase:
+    return get_collection().sched
+
+def get_all_deck_ids() -> list[int]:
+    return [item.id for item in get_decks().all_names_and_ids()]
+
+def get_all_model_ids() -> list[int]:
+    return [item.id for item in get_models().all_names_and_ids()]
 
 def get_card(card_id: int) -> Card:
     return get_collection().get_card(card_id)
+
+
+def move_main_window_to_state(state: MainWindowState):
+    aqt.mw.moveToState(state)
 
 
 @dataclass
@@ -105,7 +120,7 @@ class CardInfo:
         if self.due > 1000000:
             due_str = datetime.fromtimestamp(self.due).strftime("%b %d %H:%M")
         else:
-            due_rel = self.due - get_collection().sched.today
+            due_rel = self.due - get_scheduler().today
             due_date_str = (datetime.now() + timedelta(days=self.due)).strftime("%b %d")
             due_str = f"in {due_rel} days, {due_date_str}"
 
@@ -134,7 +149,7 @@ class CardDescription:
 
 def create_model(model_name: str, field_names: Sequence[str],
                  card_descriptions: Sequence[CardDescription]) -> int:
-    models = get_collection().models
+    models = get_models()
     model = models.new(model_name)
 
     for field_name in field_names:
@@ -151,16 +166,14 @@ def create_model(model_name: str, field_names: Sequence[str],
 
 
 def create_deck(deck_name: str) -> int:
-    return get_collection().decks.id(deck_name)
+    return get_decks().id(deck_name)
 
 
 def add_note(model_name: str, deck_name: str, fields: dict[str, str],
              tags: Sequence[str] = None) -> int:
-    collection = get_collection()
-
-    model_id = collection.models.id_for_name(model_name)
-    deck_id = collection.decks.id_for_name(deck_name)
-    note = Note(collection, model_id)
+    model_id = get_models().id_for_name(model_name)
+    deck_id = get_decks().id_for_name(deck_name)
+    note = Note(get_collection(), model_id)
 
     for field_name, field_value in fields.items():
         note[field_name] = field_value
@@ -168,7 +181,7 @@ def add_note(model_name: str, deck_name: str, fields: dict[str, str],
     if tags is not None:
         note.tags = list(tags)
 
-    collection.add_note(note, deck_id)
+    get_collection().add_note(note, deck_id)
     return note.id
 
 
@@ -182,10 +195,10 @@ def create_filtered_deck(search_string) -> int:
         order=0,  # random?
     )
 
-    filtered_deck = get_collection().sched.get_or_create_filtered_deck(DeckId(0))
+    filtered_deck = get_scheduler().get_or_create_filtered_deck(DeckId(0))
     del filtered_deck.config.search_terms[:]
     filtered_deck.config.search_terms.append(search_term)
-    return get_collection().sched.add_or_update_filtered_deck(filtered_deck).id
+    return get_scheduler().add_or_update_filtered_deck(filtered_deck).id
 
 
 # note that creating a filtered deck will change the current deck for some reason
@@ -194,12 +207,12 @@ def create_filtered_deck(search_string) -> int:
 def filtered_deck_created(search_string):
     deck_id = create_filtered_deck(search_string)
     yield deck_id
-    get_collection().decks.remove([deck_id])
+    get_decks().remove([DeckId(deck_id)])
 
 
 def show_deck_overview(deck_id):
-    get_collection().decks.set_current(deck_id)
-    aqt.mw.moveToState("overview")
+    get_decks().set_current(deck_id)
+    move_main_window_to_state("overview")
 
 
 ################################################################################ reviews
@@ -208,10 +221,10 @@ def show_deck_overview(deck_id):
 def set_scheduler(version: int):
     if version == 2:
         get_collection().set_v3_scheduler(enabled=False)
-        assert isinstance(get_collection().sched, V2Scheduler)
+        assert isinstance(get_scheduler(), V2Scheduler)
     elif version == 3:
         get_collection().set_v3_scheduler(enabled=True)
-        assert isinstance(get_collection().sched, V3Scheduler)
+        assert isinstance(get_scheduler(), V3Scheduler)
     else:
         raise ValueError(f"Bad scheduler version: {version}")
 
@@ -240,8 +253,8 @@ def clock_set_forward_by(**kwargs):
 
 
 def reset_window_to_review_state():
-    aqt.mw.moveToState("overview")
-    aqt.mw.moveToState("review")
+    move_main_window_to_state("overview")
+    move_main_window_to_state("review")
     assert aqt.mw.state == "review"
 
 def reviewer_get_current_card():
@@ -268,8 +281,8 @@ def reviewer_bury_current_card():
     aqt.mw.reviewer.bury_current_card()
 
 def unbury_cards_for_current_deck():
-    current_deck_id = get_collection().decks.get_current_id()
-    get_collection().sched.unbury_deck(current_deck_id)
+    current_deck_id = get_decks().get_current_id()
+    get_scheduler().unbury_deck(current_deck_id)
 
 
 def do_some_historic_reviews(days_to_ids_to_answers: dict[int, dict[int, int]]):

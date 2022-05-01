@@ -3,15 +3,28 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+import anki.collection
 import aqt.operations.note
 import pytest
-import anki.collection
 from _pytest.monkeypatch import MonkeyPatch  # noqa
+from anki.decks import DeckId
 from pytest_anki._launch import anki_running, temporary_user  # noqa
 from waitress import wasyncore
 
-from tests.anki_tools import anki_version, get_collection, get_deck_ids, \
-    get_model_ids, create_model, CardDescription, create_deck, add_note, set_scheduler
+from tests.anki_tools import (
+    CardDescription,
+    anki_version,
+    get_collection,
+    get_decks,
+    get_models,
+    get_all_deck_ids,
+    get_all_model_ids,
+    create_model,
+    create_deck,
+    add_note,
+    set_scheduler,
+    move_main_window_to_state,
+)
 
 try:
     from PyQt6 import QtTest
@@ -112,23 +125,23 @@ def profile_created_and_loaded(session):
 
 @contextmanager
 def current_decks_and_models_etc_preserved():
-    deck_ids_before = get_deck_ids()
-    model_ids_before = get_model_ids()
+    deck_ids_before = get_all_deck_ids()
+    model_ids_before = get_all_model_ids()
 
     try:
         yield
     finally:
-        deck_ids_after = get_deck_ids()
-        model_ids_after = get_model_ids()
+        deck_ids_after = get_all_deck_ids()
+        model_ids_after = get_all_model_ids()
 
         deck_ids_to_delete = {*deck_ids_after} - {*deck_ids_before}
         model_ids_to_delete = {*model_ids_after} - {*model_ids_before}
 
-        get_collection().decks.remove(deck_ids_to_delete)
+        get_decks().remove(deck_ids_to_delete)  # noqa
         for model_id in model_ids_to_delete:
-            get_collection().models.remove(model_id)
+            get_models().remove(model_id)
 
-        aqt.mw.moveToState('deckBrowser')
+        move_main_window_to_state("deckBrowser")
 
 
 @dataclass
@@ -162,7 +175,7 @@ def set_up_test_deck_and_test_model_and_two_notes():
 
     card_ids = get_collection().find_cards(query=f"nid:{note_id}")
 
-    get_collection().decks.set_current(deck_id)
+    get_decks().set_current(DeckId(deck_id))
 
     import delay_siblings
 
