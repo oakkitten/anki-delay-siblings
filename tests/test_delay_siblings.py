@@ -12,6 +12,11 @@ from tests.anki_tools import (
     filtered_deck_created,
     show_deck_overview,
     CardInfo,
+    clock_set_forward_by,
+    reset_window_to_review_state,
+    reviewer_show_question,
+    reviewer_show_answer,
+    reviewer_answer_card,
 )
 
 
@@ -103,18 +108,24 @@ def test_new_due_falls_within_calculated_range(setup):
     assert new_due_min <= card2_new_due - 20 <= new_due_max
 
 
+@pytest.mark.parametrize(
+    "enabled, expected_state_after_answer",
+    [(False, "review"), (True, "overview")],
+    ids=["stays if not enabled", "removed if enabled"]
+)
 @try_with_all_schedulers
-def test_card_gets_removed_from_review_queue(setup):
+def test_card_gets_removed_from_review_queue(setup, enabled, expected_state_after_answer):
     review_cards_in_0_5_10_days(setup)
 
-    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.current_deck.enabled = enabled
 
-    review_card1_in_20_days(setup)
+    with clock_set_forward_by(days=20):
+        reset_window_to_review_state()
+        reviewer_show_question()
+        reviewer_show_answer()
+        reviewer_answer_card(EASY)
 
-    with pytest.raises(Exception, match=f"(?s)didn't show.*id: {setup.card2_id}"):
-        do_some_historic_reviews({
-            20: {setup.card2_id: EASY},
-        })
+        assert aqt.mw.state == expected_state_after_answer
 
 
 ########################################################################################
