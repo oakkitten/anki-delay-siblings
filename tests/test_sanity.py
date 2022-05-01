@@ -1,10 +1,13 @@
+import pytest
+
 from tests.anki_helpers import (
     EASY,
     DO_NOT_ANSWER,
     do_some_historic_reviews,
     get_card,
     filtered_deck_created,
-    show_deck_overview, CardInfo,
+    show_deck_overview,
+    CardInfo,
 )
 
 
@@ -126,3 +129,22 @@ def test_new_due_falls_within_change_range(setup):
 
     card2_new_due = get_card(card2_id).due
     assert new_due_min <= card2_new_due <= new_due_max
+
+
+@pytest.mark.parametrize(
+    "interval, cards_per_note, result",
+    [
+        (0, 2, (0, 0)),
+        (0, 3, (0, 0)),
+        (2, 2, (1, 1)),
+        (2, 3, (0, 0)),
+        (16, 2, (4, 5)),
+        (16, 3, (2, 3)),
+        (360, 2, (28, 37)),
+        (360, 3, (19, 24)),
+    ]
+)
+def test_new_due_range_function(setup, interval, cards_per_note, result):
+    from delay_siblings import calculate_new_relative_due_range
+
+    assert calculate_new_relative_due_range(interval, cards_per_note) == result
