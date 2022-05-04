@@ -261,6 +261,8 @@ def set_scheduler(version: int):
     else:
         raise ValueError(f"Bad scheduler version: {version}")
 
+    say(f":: using scheduler v{version}")
+
 
 def reset_window_to_review_state():
     move_main_window_to_state("overview")
