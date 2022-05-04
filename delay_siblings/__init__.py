@@ -1,31 +1,7 @@
-﻿# -*- coding: utf-8 -*-
-
-# Copyright (c) 2018-2022 oakkitten
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
-
-# When reviewing a card, reschedule siblings of the current card if they appear too close.
+﻿# When reviewing a card, reschedule siblings of the current card if they appear too close.
 # Especially useful when reviewing a deck that wasn't touched for a while.
 
 # For reference: https://github.com/ankidroid/Anki-Android/wiki/Database-Structure
-# To get some type checking, see https://github.com/ankitects/anki-typecheck
 
 
 import random
@@ -208,7 +184,7 @@ class Config:
 config = Config()
 
 
-################################################################################## menus
+######################################################################## menus and hooks
 
 
 def flip_enabled(_key):
@@ -243,9 +219,6 @@ def state_did_change(next_state: str, _previous_state):
     menu_enabled.setChecked(config.current_deck.enabled)
     menu_quiet.setChecked(config.current_deck.quiet)
     menu_quiet.setEnabled(config.current_deck.enabled)
-
-
-################################################################################## hooks
 
 
 gui_hooks.reviewer_did_show_answer.append(reviewer_did_show_answer)
