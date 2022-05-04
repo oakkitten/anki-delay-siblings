@@ -1,0 +1,63 @@
+name: CI
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  run-tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: Anki 2.1.49
+            python: 3.8
+            environment: py38-anki49
+          - name: Anki 2.1.51 (Qt5)
+            python: 3.9
+            environment: py39-anki51qt5
+          - name: Anki 2.1.51 (Qt6)
+            python: 3.9
+            environment: py39-anki51qt6
+      fail-fast: false
+
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pyqt5-dev-tools xvfb
+
+      - name: Setup Python ${{ matrix.python }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Run tests
+        run: tox -e ${{ matrix.environment }} -- --forked --verbose
+
+  build-and-store-artifact:
+    name: Assemble .ankiaddon
+    runs-on: ubuntu-latest
+
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [run-tests]
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    - name: Assemble the add-on
+      run: cd delay_siblings && zip -r ../delay_siblings.ankiaddon *
+
+    - name: Store artifacts
+      uses: svenstaro/upload-release-action@1.0.1
+      with:
+        tag: ${{ github.ref }}
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: delay_siblings.ankiaddon
+        asset_name: delay_siblings.ankiaddon
