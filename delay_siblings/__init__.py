@@ -11,10 +11,21 @@ from typing import Sequence, Iterator
 
 from anki.cards import Card
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
-from anki.consts import QUEUE_TYPE_SUSPENDED, CARD_TYPE_REV as CARD_TYPE_REVIEWING
 from aqt.qt import QAction
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
+
+from .tools import (
+    is_card_reviewing,
+    is_card_suspended,
+    get_card_absolute_due,
+    get_today,
+    get_siblings,
+    set_card_absolute_due,
+    remove_card_from_current_review_queue,
+    AnkiDate,
+    sorted_by_value,
+)
 
 
 # interval → ranges for 2; 3 cards per note:
@@ -49,44 +60,6 @@ def calculate_new_relative_due_range(interval: int, cards_per_note: int) -> (int
     return int(round(f)), int(round(f * 1.3))
 
 
-def is_card_suspended(card: Card) -> bool:
-    return card.queue == QUEUE_TYPE_SUSPENDED
-
-# todo also reschedule learning/relearning cards?
-def is_card_reviewing(card: Card) -> bool:
-    return card.type == CARD_TYPE_REVIEWING
-
-def is_card_in_a_filtered_deck(card: Card) -> bool:
-    return card.odue != 0 and card.odid != 0
-
-
-# card due is stored in days, starting at some abstract date; this gets today's due
-def get_today() -> int:
-    return mw.col.sched.today
-
-def get_card_absolute_due(card: Card) -> int:
-    return card.odue if is_card_in_a_filtered_deck(card) else card.due
-
-def set_card_absolute_due(card: Card, absolute_due: int):
-    if is_card_in_a_filtered_deck(card):
-        card.odue = absolute_due
-    else:
-        card.due = absolute_due
-    card.flush()
-
-
-def remove_card_from_current_review_queue(card: Card):
-    with suppress(AttributeError, ValueError):
-        mw.col.sched._revQueue.remove(card.id)  # noqa
-
-
-# see https://github.com/ankitects/anki/blob/6ecf2ffa/pylib/anki/sched.py#L985-L986
-def get_siblings(card: Card) -> "list[Card]":
-    card_ids = card.col.db.list("select id from cards where nid=? and id!=?",
-                                card.nid, card.id)
-    return [mw.col.get_card(card_id) for card_id in card_ids]
-
-
 @dataclass
 class Reschedule:
     sibling: Card
@@ -94,7 +67,7 @@ class Reschedule:
     new_absolute_due: int
 
 
-def get_pending_reschedules(siblings: Sequence[Card], last_review_day: int) -> Iterator[Reschedule]:
+def get_reschedules(siblings: Sequence[Card], last_review_day: int) -> Iterator[Reschedule]:
     cards_per_note = len(siblings) + 1
 
     for sibling in siblings:
@@ -126,6 +99,11 @@ def get_reschedule_message(reschedule: Reschedule):
     )
 
 
+########################################################################################
+############################################################################### reviewer
+########################################################################################
+
+
 def reviewer_did_show_answer(card: Card):
     if not config.current_deck.enabled:
         return
@@ -134,7 +112,7 @@ def reviewer_did_show_answer(card: Card):
     siblings = get_siblings(card)
     messages = []
 
-    for reschedule in get_pending_reschedules(siblings, last_review_day=today):
+    for reschedule in get_reschedules(siblings, last_review_day=today):
         set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
         remove_card_from_current_review_queue(reschedule.sibling)
 
@@ -153,29 +131,8 @@ def reviewer_did_show_answer(card: Card):
 ########################################################################################
 
 
-@dataclass
-class AnkiDate:
-    epoch: int
-    anki_days: int
-
-    @classmethod
-    def from_epoch(cls, epoch_timestamp):
-        from datetime import datetime, timedelta
-        timing = mw.col.sched._timing_today()
-
-        today_started_at = datetime.fromtimestamp(timing.next_day_at) - timedelta(days=1)
-        genesis = today_started_at - timedelta(days=timing.days_elapsed)
-        delta = datetime.fromtimestamp(epoch_timestamp) - genesis
-
-        return cls(epoch_timestamp, delta.days)
-
-
 # card id to last review time, the latter in epoch milliseconds
 IdToLastReview = "dict[int, int]"
-
-
-def sorted_by_value(dictionary):
-    return dict(sorted(dictionary.items(), key=lambda item: item[1]))
 
 
 def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLastReview:
@@ -188,7 +145,7 @@ def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLa
                 continue
             if last_review_before > last_review_after:
                 raise Exception(
-                    f"After sync, mod of card {card_id} unexpectedly changed"
+                    f"After sync, last review of {card_id} unexpectedly changed"
                     f" from {last_review_before} to a lower value {last_review_before}"
                 )
         result[card_id] = last_review_after
@@ -196,33 +153,26 @@ def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLa
     return result
 
 
-def get_pending_sync_diff_reschedules(sync_diff: IdToLastReview):
+def get_pending_sync_diff_reschedules(sync_diff: IdToLastReview) -> Iterator[Reschedule]:
     sync_diff = sorted_by_value(sync_diff)
-
     today = get_today()
-    result = []
 
     while sync_diff:
         card_id, last_review_time = sync_diff.popitem()  # last, most recent review
         siblings = get_siblings(mw.col.get_card(card_id))
-
-        reschedules = get_pending_reschedules(
-            siblings=siblings,
-            last_review_day=AnkiDate.from_epoch(last_review_time / 1000).anki_days,
-        )
+        last_review_day = AnkiDate.from_epoch(last_review_time / 1000).anki_days
+        reschedules = get_reschedules(siblings, last_review_day)
 
         for reschedule in reschedules:
             if reschedule.new_absolute_due > today:
-                result.append(reschedule)
+                yield reschedule
 
         for sibling in siblings:
             with suppress(KeyError):
                 sync_diff.pop(sibling.id)
 
-    return result
 
-
-def run_reschedules(reschedules: Sequence[Reschedule]):
+def run_reschedules(reschedules: Iterator[Reschedule]):
     for reschedule in reschedules:
         set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
 
