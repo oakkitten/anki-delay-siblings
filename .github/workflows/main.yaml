@@ -18,6 +18,9 @@ jobs:
           - name: Anki 2.1.51 (Qt6)
             python: 3.9
             environment: py39-anki51qt6
+          - name: Latest Anki
+            python: 3.9
+            environment: py39-ankilatest
       fail-fast: false
 
     steps:
@@ -40,10 +43,9 @@ jobs:
       - name: Run tests
         run: tox -e ${{ matrix.environment }} -- --forked --verbose
 
-  build-and-store-artifact:
+  assemble-ankiaddon:
     name: Assemble .ankiaddon
     runs-on: ubuntu-latest
-
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [run-tests]
 
@@ -54,7 +56,7 @@ jobs:
     - name: Assemble the add-on
       run: cd delay_siblings && zip -r ../delay_siblings.ankiaddon *
 
-    - name: Store artifacts
+    - name: Store artifact
       uses: svenstaro/upload-release-action@1.0.1
       with:
         tag: ${{ github.ref }}

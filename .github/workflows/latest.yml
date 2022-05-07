@@ -1,0 +1,34 @@
+name: Update latest
+
+on:
+  schedule:
+   - cron: "0 12 * * *"
+  workflow_dispatch:
+
+jobs:
+  update-latest:
+    name: Update latest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Change to latest version
+        run: |
+          export LATEST=$(pip index --pre versions aqt | perl -ne 'm/aqt \((2.1.[a-z0-9]+)\)/ && print "$1"')
+          sed -i -r "s/ankilatest: (anki|aqt\[qt6\])==2.1.[a-z0-9]+/ankilatest: \1==$LATEST/g" tox.ini
+          echo "LATEST=$LATEST" >> "$GITHUB_ENV"
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.KITTENOAK_PAT }}
+          push-to-fork: kittenoak/anki-delay-siblings
+          title: Update latest Anki version to ${{ env.LATEST }}
+          commit-message: Update latest Anki version to ${{ env.LATEST }}
