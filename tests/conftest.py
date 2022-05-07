@@ -11,7 +11,11 @@ from tests.tools.collection import (
     create_model,
     create_deck,
     add_note,
-    set_scheduler, do_some_historic_reviews, EASY, DO_NOT_ANSWER,
+    set_scheduler,
+    do_some_historic_reviews,
+    EASY,
+    DO_NOT_ANSWER,
+    reset_window_to_review_state,
 )
 
 from tests.tools.testing import (
@@ -87,9 +91,11 @@ def set_up_test_deck_and_test_model_and_two_notes():
         tags=["tag1"],
     )
 
-    get_decks().set_current(DeckId(deck_id))
 
     card_ids = get_collection().find_cards(query=f"nid:{note_id}")
+
+    get_decks().set_current(DeckId(deck_id))
+    reset_window_to_review_state()
 
     import delay_siblings
 

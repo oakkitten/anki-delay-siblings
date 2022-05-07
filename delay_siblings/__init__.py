@@ -194,9 +194,10 @@ def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
 
 # noinspection PyTypeChecker
 def get_card_id_to_last_review_time_for_all_cards() -> IdToLastReview:
-    return dict(mw.col.db.all("""
+    return dict(mw.col.db.all(f"""
         select revlog.cid, max(revlog.id)
         from (revlog inner join cards on cards.id = revlog.cid)
+        where cards.did in ({",".join(config.enabled_deck_ids())})
         group by revlog.cid
     """))
 
@@ -226,6 +227,7 @@ def sync_did_finish():
 
 
 config = Config()
+config.load()
 
 
 def flip_enabled(_key):
