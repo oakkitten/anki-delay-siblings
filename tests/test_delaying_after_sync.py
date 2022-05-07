@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 
+import pytest
 from aqt import gui_hooks
 
 from tests.conftest import (
@@ -12,12 +13,6 @@ from tests.tools.collection import (
     get_card,
     clock_set_forward_by,
 )
-
-
-def turn_on_offer_to_disabled_after_sync():
-    import delay_siblings
-    from delay_siblings.configuration import OFFER_TO_DELAY_AFTER_SYNC
-    delay_siblings.config.data[OFFER_TO_DELAY_AFTER_SYNC] = True
 
 
 @contextmanager
@@ -34,84 +29,78 @@ def reviewing_on_another_device():
         delay_siblings.config = old_config
 
 
+@contextmanager
+def syncing(for_days: int):
+    gui_hooks.sync_will_start()
+
+    with reviewing_on_another_device():
+        yield
+
+    with clock_set_forward_by(days=for_days):
+        gui_hooks.sync_did_finish()
+
+
+@pytest.fixture
+def on(setup):
+    import delay_siblings
+    from delay_siblings.configuration import OFFER_TO_DELAY_AFTER_SYNC
+    delay_siblings.config.data[OFFER_TO_DELAY_AFTER_SYNC] = True
+
+
 ########################################################################################
 
 
 @try_with_all_schedulers
-def test_addon_does_not_reschedule_cards_if_not_enabled_for_deck(setup):
-    turn_on_offer_to_disabled_after_sync()
-
+def test_addon_does_not_reschedule_cards_if_not_enabled_for_deck(setup, on):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
-    gui_hooks.sync_will_start()
-
-    with reviewing_on_another_device():
+    with syncing(for_days=20):
         review_card1_in_20_days(setup)
 
-    with clock_set_forward_by(days=20):
-        gui_hooks.sync_did_finish()
-        card2_new_due = get_card(setup.card2_id).due
-
-        assert card2_old_due == card2_new_due
+    card2_new_due = get_card(setup.card2_id).due
+    assert card2_old_due == card2_new_due
 
 
 @try_with_all_schedulers
-def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup):
-    turn_on_offer_to_disabled_after_sync()
-
+def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup, on):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
     setup.delay_siblings.config.current_deck.enabled = True
-    gui_hooks.sync_will_start()
 
-    with reviewing_on_another_device():
+    with syncing(for_days=20):
         review_card1_in_20_days(setup)
 
-    with clock_set_forward_by(days=20):
-        gui_hooks.sync_did_finish()
-        card2_new_due = get_card(setup.card2_id).due
-
-        assert card2_old_due != card2_new_due
+    card2_new_due = get_card(setup.card2_id).due
+    assert card2_new_due > card2_old_due
+    assert card2_new_due - card2_old_due < 10
 
 
 @try_with_all_schedulers
-def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setup):
-    turn_on_offer_to_disabled_after_sync()
-
+def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setup, on):
     setup.delay_siblings.config.current_deck.enabled = True
-    gui_hooks.sync_will_start()
 
-    with reviewing_on_another_device():
+    with syncing(for_days=20):
         review_cards_in_0_5_10_days(setup)
+        review_card1_in_20_days(setup)
         card2_old_due = get_card(setup.card2_id).due
 
-        review_card1_in_20_days(setup)
-
-    with clock_set_forward_by(days=20):
-        gui_hooks.sync_did_finish()
-        card2_new_due = get_card(setup.card2_id).due
-
-        assert card2_old_due != card2_new_due
+    card2_new_due = get_card(setup.card2_id).due
+    assert card2_new_due > card2_old_due
+    assert card2_new_due - card2_old_due < 10
 
 
 # same as test_addon_reschedules_one_card_after_sync_that_brings_one_new_review, but more days
 @try_with_all_schedulers
-def test_addon_does_not_reschedule_if_new_due_would_be_in_the_past(setup):
-    turn_on_offer_to_disabled_after_sync()
-
+def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup, on):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
     setup.delay_siblings.config.current_deck.enabled = True
-    gui_hooks.sync_will_start()
 
-    with reviewing_on_another_device():
+    with syncing(for_days=30):
         review_card1_in_20_days(setup)
 
-    with clock_set_forward_by(days=30):
-        gui_hooks.sync_did_finish()
-        card2_new_due = get_card(setup.card2_id).due
-
-        assert card2_old_due == card2_new_due
+    card2_new_due = get_card(setup.card2_id).due
+    assert card2_old_due == card2_new_due
