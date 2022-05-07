@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import aqt
 import pytest
 
 from tests.conftest import (
@@ -8,9 +9,7 @@ from tests.conftest import (
     show_answer_of_card1_in_20_days,
 )
 
-from tests.tools.collection import (
-    move_main_window_to_state,
-)
+from tests.tools.collection import move_main_window_to_state
 
 
 @pytest.mark.parametrize(
@@ -76,3 +75,11 @@ def test_menus_get_disabled_enabled(setup):
     assert get_menu_status() == (True, True, True, True)
     assert delay_siblings.config.current_deck.enabled is True
     assert delay_siblings.config.current_deck.quiet is True
+
+
+def test_AnkiDate(setup):
+    from delay_siblings.tools import get_today, AnkiDate
+    next_day_at = aqt.mw.col.sched._timing_today().next_day_at
+
+    assert AnkiDate.from_epoch(next_day_at - 100).anki_days == get_today()
+    assert AnkiDate.from_epoch(next_day_at + 100).anki_days == get_today() + 1
