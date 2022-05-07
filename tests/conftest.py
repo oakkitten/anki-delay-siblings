@@ -11,7 +11,7 @@ from tests.tools.collection import (
     create_model,
     create_deck,
     add_note,
-    set_scheduler,
+    set_scheduler, do_some_historic_reviews, EASY, DO_NOT_ANSWER,
 )
 
 from tests.tools.testing import (
@@ -36,6 +36,26 @@ addon_name = "delay_siblings"
 addon_folder = os.path.join(os.path.split(__file__)[0], f"../{addon_name}")
 
 add_addon_to_copy_into_anki_addons_folder(addon_name, addon_folder)
+
+
+def review_cards_in_0_5_10_days(setup):
+    do_some_historic_reviews({
+        0: {setup.card1_id: EASY, setup.card2_id: EASY},
+        5: {setup.card1_id: EASY, setup.card2_id: EASY},
+        10: {setup.card1_id: EASY, setup.card2_id: EASY},
+    })
+
+
+def review_card1_in_20_days(setup):
+    do_some_historic_reviews({
+        20: {setup.card1_id: EASY},
+    })
+
+
+def show_answer_of_card1_in_20_days(setup):
+    do_some_historic_reviews({
+        20: {setup.card1_id: DO_NOT_ANSWER},
+    })
 
 
 @dataclass

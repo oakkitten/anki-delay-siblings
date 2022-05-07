@@ -1,26 +1,15 @@
 from aqt import gui_hooks
 
-from tests.conftest import try_with_all_schedulers
+from tests.conftest import (
+    try_with_all_schedulers,
+    review_cards_in_0_5_10_days,
+    review_card1_in_20_days
+)
+
 from tests.tools.collection import (
-    EASY,
-    do_some_historic_reviews,
     get_card,
     clock_set_forward_by,
 )
-
-
-def review_cards_in_0_5_10_days(setup):
-    do_some_historic_reviews({
-        0: {setup.card1_id: EASY, setup.card2_id: EASY},
-        5: {setup.card1_id: EASY, setup.card2_id: EASY},
-        10: {setup.card1_id: EASY, setup.card2_id: EASY},
-    })
-
-
-def review_card1_in_20_days(setup):
-    do_some_historic_reviews({
-        20: {setup.card1_id: EASY},
-    })
 
 
 @try_with_all_schedulers
