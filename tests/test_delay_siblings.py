@@ -29,6 +29,7 @@ def review_cards_in_0_5_10_days(setup):
     })
 
 
+# todo rename to view answer?
 def review_card1_in_20_days(setup):
     do_some_historic_reviews({
         20: {setup.card1_id: DO_NOT_ANSWER},
