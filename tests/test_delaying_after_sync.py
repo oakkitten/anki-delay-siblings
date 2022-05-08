@@ -47,6 +47,18 @@ def on(setup):
     delay_siblings.config.data[OFFER_TO_DELAY_AFTER_SYNC] = True
 
 
+@pytest.fixture(autouse=True)
+def automatically_accept_the_delay_after_sync_dialog(monkeypatch):
+    from delay_siblings.delay_after_sync_dialog import DelayAfterSyncDialog
+
+    def new_exec(self):
+        self.show()
+        self.accept()
+        return self.result()
+
+    monkeypatch.setattr(DelayAfterSyncDialog, "exec", new_exec)
+
+
 ########################################################################################
 
 
@@ -93,7 +105,7 @@ def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setu
 
 # same as test_addon_reschedules_one_card_after_sync_that_brings_one_new_review, but more days
 @try_with_all_schedulers
-def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup, on):
+def test_addon_does_not_reschedule_if_new_due_would_be_in_the_past(setup, on):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 

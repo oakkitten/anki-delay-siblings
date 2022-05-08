@@ -11,11 +11,12 @@ from typing import Sequence, Iterator
 
 from anki.cards import Card
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
-from aqt.qt import QAction
+from aqt.qt import QAction, QDialog
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 
 from .configuration import Config
+from .delay_after_sync_dialog import DelayAfterSyncDialog
 from .tools import (
     is_card_reviewing,
     is_card_suspended,
@@ -173,20 +174,22 @@ def get_pending_sync_diff_reschedules(sync_diff: IdToLastReview) -> Iterator[Res
                 sync_diff.pop(sibling.id)
 
 
-def run_reschedules(reschedules: Iterator[Reschedule]):
-    for reschedule in reschedules:
-        set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
-
-
 def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
     sync_diff = calculate_sync_diff(before, after)
     reschedules = list(get_pending_sync_diff_reschedules(sync_diff))
-    run_reschedules(reschedules)
 
     print(f">> before {before}")
     print(f">> after {after}")
     print(f">> sync_diff {sync_diff}")
     print(f">> reschedules {reschedules}")
+
+    if reschedules:
+        dialog = DelayAfterSyncDialog()
+        dialog.set_reschedules(reschedules)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            print(f">> executing")
+            for reschedule in reschedules:
+                set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
 
 
 ########################################################################################
