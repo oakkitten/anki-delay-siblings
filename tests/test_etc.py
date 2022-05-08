@@ -37,8 +37,8 @@ def test_tooltip_not_called_if_quiet(setup, quiet, monkeypatch):
     monkeypatch.setattr(setup.delay_siblings, "tooltip", MagicMock())
     review_cards_in_0_5_10_days(setup)
 
-    setup.delay_siblings.config.current_deck.enabled = True
-    setup.delay_siblings.config.current_deck.quiet = quiet
+    setup.delay_siblings.config.enabled_for_current_deck = True
+    setup.delay_siblings.config.quiet = quiet
 
     show_answer_of_card1_in_20_days(setup)
 
@@ -52,29 +52,27 @@ def test_menus_get_disabled_enabled(setup):
         return (
             delay_siblings.menu_enabled.isEnabled(),
             delay_siblings.menu_enabled.isChecked(),
-            delay_siblings.menu_quiet.isEnabled(),
             delay_siblings.menu_quiet.isChecked(),
+            delay_siblings.menu_offer_to_delay_after_sync.isChecked(),
+
         )
 
     move_main_window_to_state("deckBrowser")
-    assert get_menu_status() == (False, False, False, False)
+    assert get_menu_status() == (False, False, False, True)
 
     move_main_window_to_state("overview")
-    assert get_menu_status() == (True, False, False, False)
+    assert get_menu_status() == (True, False, False, True)
 
     delay_siblings.menu_enabled.trigger()
-    assert get_menu_status() == (True, True, True, False)
-
-    delay_siblings.menu_quiet.trigger()
-    assert get_menu_status() == (True, True, True, True)
+    assert get_menu_status() == (True, True, False, True)
+    assert delay_siblings.config.enabled_for_current_deck is True
 
     move_main_window_to_state("deckBrowser")
-    assert get_menu_status() == (False, False, False, False)
-
+    delay_siblings.config.enabled_for_current_deck = True
+    delay_siblings.config.quiet = True
+    delay_siblings.config.offer_to_delay_after_sync = False
     move_main_window_to_state("overview")
-    assert get_menu_status() == (True, True, True, True)
-    assert delay_siblings.config.current_deck.enabled is True
-    assert delay_siblings.config.current_deck.quiet is True
+    assert get_menu_status() == (True, True, True, False)
 
 
 def test_AnkiDate(setup):
@@ -83,3 +81,24 @@ def test_AnkiDate(setup):
 
     assert AnkiDate.from_epoch(next_day_at - 100).anki_days == get_today()
     assert AnkiDate.from_epoch(next_day_at + 100).anki_days == get_today() + 1
+
+
+class TestConfigMigration:
+    def test_v0_default_config_migration(self, setup):
+        data = {"version": 0}
+        setup.delay_siblings.configuration.migrate(data)
+
+    def test_v0_changed_config_migration(self, setup):
+        data = {"version": 0, "123": {"enabled": False, "quiet": True}}
+        setup.delay_siblings.configuration.migrate(data)
+
+    def test_v0_migration_fails_with_bad_config(self, setup):
+        with pytest.raises(Exception):
+            data = {"version": 0, 123: {"a": "b"}}
+            setup.delay_siblings.configuration.migrate(data)
+
+    def test_default_configuration_restored_on_failure(self, setup, monkeypatch):
+        monkeypatch.setattr(setup.delay_siblings.configuration, "showWarning", MagicMock())
+        data = {"version": 0, 123: {"a": "b"}}
+        data = setup.delay_siblings.configuration.migrate_data_restoring_default_config_on_error(data)
+        assert data == setup.delay_siblings.configuration.load_default_config()

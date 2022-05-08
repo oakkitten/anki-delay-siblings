@@ -1,3 +1,6 @@
 {
-	"version": 0
+	"version": 1,
+	"enabled_for_decks": {},
+	"quiet": false,
+	"offer_to_delay_after_sync": true
 }

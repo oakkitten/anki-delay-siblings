@@ -20,7 +20,7 @@ from tests.tools.collection import (
 
 from tests.tools.testing import (
     add_addon_to_copy_into_anki_addons_folder,
-    close_all_dialogs_and_wait_for_them_to_run_closing_callbacks
+    close_all_dialogs_and_wait_for_them_to_run_closing_callbacks,
 )
 
 # used fixtures and pytest hooks
@@ -98,6 +98,7 @@ def set_up_test_deck_and_test_model_and_two_notes():
     reset_window_to_review_state()
 
     import delay_siblings
+    delay_siblings.config.load()
 
     return Setup(
         delay_siblings=delay_siblings,

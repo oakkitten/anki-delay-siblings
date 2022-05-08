@@ -15,6 +15,10 @@ def sorted_by_value(dictionary):
 ########################################################################################
 
 
+def get_current_deck_id() -> int:
+    return mw.col.decks.get_current_id()
+
+
 def is_card_suspended(card: Card) -> bool:
     return card.queue == QUEUE_TYPE_SUSPENDED
 

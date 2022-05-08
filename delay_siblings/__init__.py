@@ -15,7 +15,7 @@ from aqt.qt import QAction, QDialog
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 
-from .configuration import Config
+from .configuration import Config, run_on_configuration_change
 from .delay_after_sync_dialog import DelayAfterSyncDialog
 from .tools import (
     is_card_reviewing,
@@ -106,8 +106,9 @@ def get_reschedule_message(reschedule: Reschedule):
 ########################################################################################
 
 
+@gui_hooks.reviewer_did_show_answer.append
 def reviewer_did_show_answer(card: Card):
-    if not config.current_deck.enabled:
+    if not config.enabled_for_current_deck:
         return
 
     today = get_today()
@@ -120,7 +121,7 @@ def reviewer_did_show_answer(card: Card):
 
         if (
             reschedule.new_absolute_due - max(reschedule.old_absolute_due, today) >= 14
-            or not config.current_deck.quiet
+            or not config.quiet
         ):
             messages.append(get_reschedule_message(reschedule))
 
@@ -200,7 +201,7 @@ def get_card_id_to_last_review_time_for_all_cards() -> IdToLastReview:
     return dict(mw.col.db.all(f"""
         select revlog.cid, max(revlog.id)
         from (revlog inner join cards on cards.id = revlog.cid)
-        where cards.did in ({",".join(config.enabled_deck_ids())})
+        where cards.did in ({",".join(config.enabled_for_deck_ids)})
         group by revlog.cid
     """))
 
@@ -225,7 +226,7 @@ def sync_did_finish():
 
 
 ########################################################################################
-######################################################################## menus and hooks
+################################################################ menus and configuration
 ########################################################################################
 
 
@@ -234,38 +235,44 @@ config.load()
 
 
 def flip_enabled(_key):
-    config.current_deck.enabled = not config.current_deck.enabled
-    menu_quiet.setEnabled(config.current_deck.enabled)
-
+    config.enabled_for_current_deck = menu_enabled.isChecked()
 
 def flip_quiet(_key):
-    config.current_deck.quiet = not config.current_deck.quiet
+    config.quiet = menu_quiet.isChecked()
+
+def flip_offer_to_delay_after_sync(_key):
+    config.offer_to_delay_after_sync = menu_offer_to_delay_after_sync.isChecked()
 
 
-menu_enabled = QAction("Enable sibling delaying",  # noqa
-                       mw, checkable=True, enabled=False)  # noqa
+menu_enabled = QAction("Enable sibling delaying for this deck", mw, checkable=True, enabled=False)  # noqa
 menu_enabled.triggered.connect(flip_enabled)  # noqa
 
-menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks",  # noqa
-                     mw, checkable=True, enabled=False)  # noqa
+menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks", mw, checkable=True)  # noqa
 menu_quiet.triggered.connect(flip_quiet)  # noqa
+
+menu_offer_to_delay_after_sync = QAction("Offer to delay after sync, if enabled for deck", mw, checkable=True)  # noqa
+menu_offer_to_delay_after_sync.triggered.connect(flip_offer_to_delay_after_sync)  # noqa
 
 mw.form.menuTools.addSeparator()
 mw.form.menuTools.addAction(menu_enabled)
-mw.form.menuTools.addAction(menu_quiet)
+more = mw.form.menuTools.addMenu("For all decks")
+more.addAction(menu_quiet)
+more.addAction(menu_offer_to_delay_after_sync)
 
 
-def state_did_change(next_state: str, _previous_state):
-    if next_state in ["overview", "review"]:
-        config.set_current_deck_id(mw.col.decks.get_current_id())
-        menu_enabled.setEnabled(True)
-    else:
-        config.set_current_deck_id(0)
-        menu_enabled.setEnabled(False)
-    menu_enabled.setChecked(config.current_deck.enabled)
-    menu_quiet.setChecked(config.current_deck.quiet)
-    menu_quiet.setEnabled(config.current_deck.enabled)
+def adjust_menu():
+    menu_enabled.setEnabled(mw.state in ["overview", "review"])
+    menu_enabled.setChecked(config.enabled_for_current_deck)
+    menu_quiet.setChecked(config.quiet)
+    menu_offer_to_delay_after_sync.setChecked(config.offer_to_delay_after_sync)
 
 
-gui_hooks.reviewer_did_show_answer.append(reviewer_did_show_answer)
-gui_hooks.state_did_change.append(state_did_change)
+@gui_hooks.state_did_change.append
+def state_did_change(_next_state, _previous_state):
+    adjust_menu()
+
+
+@run_on_configuration_change
+def configuration_changed():
+    config.load()
+    adjust_menu()

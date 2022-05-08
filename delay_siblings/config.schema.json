@@ -1,0 +1,31 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": [
+        "enabled_for_decks",
+        "quiet",
+        "offer_to_delay_after_sync",
+        "version"
+    ],
+    "properties": {
+        "enabled_for_decks": {
+            "type": "object",
+            "patternProperties": {
+                "^\\d+$": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
+        "quiet": {
+            "type": "boolean"
+        },
+        "offer_to_delay_after_sync": {
+            "type": "boolean"
+        },
+        "version": {
+            "const": 1
+        }
+
+    }
+}

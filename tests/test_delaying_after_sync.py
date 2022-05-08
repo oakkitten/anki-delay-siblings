@@ -18,15 +18,15 @@ from tests.tools.collection import (
 @contextmanager
 def reviewing_on_another_device():
     import delay_siblings
-    from delay_siblings.configuration import Config
+    from delay_siblings.configuration import load_default_config
 
-    old_config = delay_siblings.config
-    delay_siblings.config = Config()
+    old_config_data = delay_siblings.config.data
+    delay_siblings.config.data = load_default_config()
 
     try:
         yield
     finally:
-        delay_siblings.config = old_config
+        delay_siblings.config.data = old_config_data
 
 
 @contextmanager
@@ -42,9 +42,8 @@ def syncing(for_days: int):
 
 @pytest.fixture
 def on(setup):
-    import delay_siblings
-    from delay_siblings.configuration import OFFER_TO_DELAY_AFTER_SYNC
-    delay_siblings.config.data[OFFER_TO_DELAY_AFTER_SYNC] = True
+    from delay_siblings import config
+    config.offer_to_delay_after_sync = True
 
 
 @pytest.fixture(autouse=True)
@@ -79,7 +78,7 @@ def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup,
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
-    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.enabled_for_current_deck = True
 
     with syncing(for_days=20):
         review_card1_in_20_days(setup)
@@ -91,7 +90,7 @@ def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup,
 
 @try_with_all_schedulers
 def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setup, on):
-    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.enabled_for_current_deck = True
 
     with syncing(for_days=20):
         review_cards_in_0_5_10_days(setup)
@@ -109,7 +108,7 @@ def test_addon_does_not_reschedule_if_new_due_would_be_in_the_past(setup, on):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
-    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.enabled_for_current_deck = True
 
     with syncing(for_days=30):
         review_card1_in_20_days(setup)

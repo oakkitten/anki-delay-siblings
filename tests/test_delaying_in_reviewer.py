@@ -33,7 +33,7 @@ def test_addon_changes_one_card_due_if_enabled(setup):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
-    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.enabled_for_current_deck = True
 
     show_answer_of_card1_in_20_days(setup)
     card2_new_due = get_card(setup.card2_id).due
@@ -48,7 +48,7 @@ def test_addon_changes_one_card_due_in_a_filtered_deck(setup):
 
     with filtered_deck_created(f"cid:{setup.card2_id}"):
         show_deck_overview(setup.deck_id)
-        setup.delay_siblings.config.current_deck.enabled = True
+        setup.delay_siblings.config.enabled_for_current_deck = True
         show_answer_of_card1_in_20_days(setup)
 
     card2_new_due = get_card(setup.card2_id).due
@@ -63,7 +63,7 @@ def test_addon_changes_one_card_due_when_ran_in_a_filtered_deck(setup):
 
     with filtered_deck_created(f"cid:{setup.card1_id}") as filtered_deck_id:
         show_deck_overview(filtered_deck_id)
-        setup.delay_siblings.config.current_deck.enabled = True
+        setup.delay_siblings.config.enabled_for_current_deck = True
         show_answer_of_card1_in_20_days(setup)
 
     card2_new_due = get_card(setup.card2_id).due
@@ -80,7 +80,7 @@ def test_new_due_falls_within_calculated_range(setup):
     new_due_min, new_due_max = \
         setup.delay_siblings.calculate_new_relative_due_range(card2_interval, 2)
 
-    setup.delay_siblings.config.current_deck.enabled = True
+    setup.delay_siblings.config.enabled_for_current_deck = True
 
     show_answer_of_card1_in_20_days(setup)
     card2_new_due = get_card(setup.card2_id).due
@@ -97,7 +97,7 @@ def test_new_due_falls_within_calculated_range(setup):
 def test_card_gets_removed_from_review_queue(setup, enabled, expected_state_after_answer):
     review_cards_in_0_5_10_days(setup)
 
-    setup.delay_siblings.config.current_deck.enabled = enabled
+    setup.delay_siblings.config.enabled_for_current_deck = enabled
 
     with clock_set_forward_by(days=20):
         reset_window_to_review_state()
