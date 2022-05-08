@@ -30,7 +30,7 @@ from .tools import (
 )
 
 
-# interval → ranges for 2; 3 cards per note:
+# Interval → ranges for 2; 3 cards per note:
 #    0 →    0-0;   0-0
 #    1 →    0-0;   0-0
 #    2 →    1-1;   0-0
@@ -63,13 +63,13 @@ def calculate_new_relative_due_range(interval: int, cards_per_note: int) -> (int
 
 
 @dataclass
-class Reschedule:
+class Delay:
     sibling: Card
     old_absolute_due: int
     new_absolute_due: int
 
 
-def get_reschedules(siblings: Sequence[Card], last_review_day: int) -> Iterator[Reschedule]:
+def get_delays(siblings: Sequence[Card], last_review_day: int) -> Iterator[Delay]:
     cards_per_note = len(siblings) + 1
 
     for sibling in siblings:
@@ -85,25 +85,25 @@ def get_reschedules(siblings: Sequence[Card], last_review_day: int) -> Iterator[
         if new_relative_due_min > 0 and new_relative_due_min > old_relative_due:
             new_relative_due = random.randint(new_relative_due_min, new_relative_due_max)
             new_absolute_due = last_review_day + new_relative_due
-            yield Reschedule(sibling, old_absolute_due, new_absolute_due)
-
-
-def get_reschedule_message(reschedule: Reschedule):
-    question = strip_html(reschedule.sibling.question())
-    today = get_today()
-    interval = reschedule.sibling.ivl
-
-    return (
-        f"Sibling: {question} (interval: <b>{interval}</b> days)<br>"
-        f"Rescheduling: <b>{reschedule.old_absolute_due - today}</b> → "
-        f"<span style='color: crimson'><b>{reschedule.new_absolute_due - today}</b></span> "
-        f"days after today"
-    )
+            yield Delay(sibling, old_absolute_due, new_absolute_due)
 
 
 ########################################################################################
 ############################################################################### reviewer
 ########################################################################################
+
+
+def get_delayed_message(delay: Delay):
+    question = strip_html(delay.sibling.question())
+    today = get_today()
+    interval = delay.sibling.ivl
+
+    return (
+        f"Sibling: {question} (interval: <b>{interval}</b> days)<br>"
+        f"Rescheduling: <b>{delay.old_absolute_due - today}</b> → "
+        f"<span style='color: crimson'><b>{delay.new_absolute_due - today}</b></span> "
+        f"days after today"
+    )
 
 
 @gui_hooks.reviewer_did_show_answer.append
@@ -115,15 +115,15 @@ def reviewer_did_show_answer(card: Card):
     siblings = get_siblings(card)
     messages = []
 
-    for reschedule in get_reschedules(siblings, last_review_day=today):
-        set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
-        remove_card_from_current_review_queue(reschedule.sibling)
+    for delay in get_delays(siblings, last_review_day=today):
+        set_card_absolute_due(delay.sibling, delay.new_absolute_due)
+        remove_card_from_current_review_queue(delay.sibling)
 
         if (
-            reschedule.new_absolute_due - max(reschedule.old_absolute_due, today) >= 14
+            delay.new_absolute_due - max(delay.old_absolute_due, today) >= 14
             or not config.quiet
         ):
-            messages.append(get_reschedule_message(reschedule))
+            messages.append(get_delayed_message(delay))
 
     if messages:
         tooltip(f"<span style='color: green'>{'<hr>'.join(messages)}</span>")
@@ -134,7 +134,7 @@ def reviewer_did_show_answer(card: Card):
 ########################################################################################
 
 
-# card id to last review time, the latter in epoch milliseconds
+# Card id to last review time, the latter in epoch milliseconds
 IdToLastReview = "dict[int, int]"
 
 
@@ -156,7 +156,7 @@ def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLa
     return result
 
 
-def get_pending_sync_diff_reschedules(sync_diff: IdToLastReview) -> Iterator[Reschedule]:
+def get_delays_after_sync(sync_diff: IdToLastReview) -> Iterator[Delay]:
     sync_diff = sorted_by_value(sync_diff)
     today = get_today()
 
@@ -164,11 +164,11 @@ def get_pending_sync_diff_reschedules(sync_diff: IdToLastReview) -> Iterator[Res
         card_id, last_review_time = sync_diff.popitem()  # last, most recent review
         siblings = get_siblings(mw.col.get_card(card_id))
         last_review_day = AnkiDate.from_epoch(last_review_time / 1000).anki_days
-        reschedules = get_reschedules(siblings, last_review_day)
+        delays = get_delays(siblings, last_review_day)
 
-        for reschedule in reschedules:
-            if reschedule.new_absolute_due > today:
-                yield reschedule
+        for delay in delays:
+            if delay.new_absolute_due > today:
+                yield delay
 
         for sibling in siblings:
             with suppress(KeyError):
@@ -177,20 +177,20 @@ def get_pending_sync_diff_reschedules(sync_diff: IdToLastReview) -> Iterator[Res
 
 def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
     sync_diff = calculate_sync_diff(before, after)
-    reschedules = list(get_pending_sync_diff_reschedules(sync_diff))
+    delays = list(get_delays_after_sync(sync_diff))
 
-    print(f">> before {before}")
-    print(f">> after {after}")
-    print(f">> sync_diff {sync_diff}")
-    print(f">> reschedules {reschedules}")
+    # print(f":: {before=}")
+    # print(f":: {after=}")
+    # print(f":: {sync_diff=}")
+    # print(f":: {delays=}")
 
-    if reschedules:
+    if delays:
         dialog = DelayAfterSyncDialog()
-        dialog.set_reschedules(reschedules)
+        dialog.set_delays(delays)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            print(f">> executing")
-            for reschedule in reschedules:
-                set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
+            # print(f":: executing")
+            for delay in delays:
+                set_card_absolute_due(delay.sibling, delay.new_absolute_due)
 
 
 ########################################################################################
@@ -234,14 +234,14 @@ config = Config()
 config.load()
 
 
-def flip_enabled(_key):
-    config.enabled_for_current_deck = menu_enabled.isChecked()
+def flip_enabled(checked):
+    config.enabled_for_current_deck = checked
 
-def flip_quiet(_key):
-    config.quiet = menu_quiet.isChecked()
+def flip_quiet(checked):
+    config.quiet = checked
 
-def flip_offer_to_delay_after_sync(_key):
-    config.offer_to_delay_after_sync = menu_offer_to_delay_after_sync.isChecked()
+def flip_offer_to_delay_after_sync(checked):
+    config.offer_to_delay_after_sync = checked
 
 
 menu_enabled = QAction("Enable sibling delaying for this deck", mw, checkable=True, enabled=False)  # noqa
@@ -255,9 +255,9 @@ menu_offer_to_delay_after_sync.triggered.connect(flip_offer_to_delay_after_sync)
 
 mw.form.menuTools.addSeparator()
 mw.form.menuTools.addAction(menu_enabled)
-more = mw.form.menuTools.addMenu("For all decks")
-more.addAction(menu_quiet)
-more.addAction(menu_offer_to_delay_after_sync)
+menu_for_all_decks = mw.form.menuTools.addMenu("For all decks")
+menu_for_all_decks.addAction(menu_quiet)
+menu_for_all_decks.addAction(menu_offer_to_delay_after_sync)
 
 
 def adjust_menu():

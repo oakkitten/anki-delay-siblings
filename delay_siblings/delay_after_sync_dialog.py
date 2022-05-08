@@ -3,16 +3,17 @@ from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the n
 from aqt.qt import QDialog, QVBoxLayout, QDialogButtonBox, QListWidget, QLabel, qconnect
 
 
-def get_reschedule_message(reschedule):
-    question = strip_html(reschedule.sibling.question())
+def get_delayed_message(delay):
+    question = strip_html(delay.sibling.question())
     if len(question) > 30:
         question = question[:30] + "…"
     today = aqt.mw.col.sched.today
-    interval = reschedule.sibling.ivl
-    old_due = reschedule.old_absolute_due - today
-    new_due = reschedule.new_absolute_due - today
+    interval = delay.sibling.ivl
+    old_relative_due = delay.old_absolute_due - today
+    new_relative_due = delay.new_absolute_due - today
 
-    return f"{question}\t(interval: {interval} days, due: {old_due} → {new_due} days after today)"
+    return f"{question} (interval: {interval} days, " \
+           f"due: {old_relative_due} → {new_relative_due} days after today)"
 
 
 # noinspection PyAttributeOutsideInit
@@ -23,7 +24,6 @@ class DelayAfterSyncDialog(QDialog):
         self.setWindowTitle("Delay siblings")
         self.resize(500, 300)
         self.create_interface()
-        self.reschedules = []
 
     def create_interface(self):
         layout = QVBoxLayout(self)
@@ -44,6 +44,6 @@ class DelayAfterSyncDialog(QDialog):
         qconnect(cancel_button.clicked, self.reject)
         layout.addWidget(button_box)  # noqa
 
-    def set_reschedules(self, reschedules):
+    def set_delays(self, delays):
         self.list.clear()
-        self.list.addItems(get_reschedule_message(reschedule) for reschedule in reschedules)
+        self.list.addItems(get_delayed_message(delay) for delay in delays)
