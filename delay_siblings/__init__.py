@@ -261,10 +261,11 @@ menu_for_all_decks.addAction(menu_offer_to_delay_after_sync)
 
 
 def adjust_menu():
-    menu_enabled.setEnabled(mw.state in ["overview", "review"])
-    menu_enabled.setChecked(config.enabled_for_current_deck)
-    menu_quiet.setChecked(config.quiet)
-    menu_offer_to_delay_after_sync.setChecked(config.offer_to_delay_after_sync)
+    if mw.col is not None:
+        menu_enabled.setEnabled(mw.state in ["overview", "review"])
+        menu_enabled.setChecked(config.enabled_for_current_deck)
+        menu_quiet.setChecked(config.quiet)
+        menu_offer_to_delay_after_sync.setChecked(config.offer_to_delay_after_sync)
 
 
 @gui_hooks.state_did_change.append
