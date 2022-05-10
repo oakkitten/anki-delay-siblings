@@ -192,6 +192,7 @@ def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
             for delay in delays:
                 set_card_absolute_due(delay.sibling, delay.new_absolute_due)
 
+            tooltip(f"<span style='color: green'>{len(delays)} cards rescheduled.</span>")
 
 ########################################################################################
 
