@@ -1,5 +1,4 @@
 from contextlib import suppress
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Sequence
 
@@ -31,11 +30,6 @@ def is_card_in_a_filtered_deck(card: Card) -> bool:
     return card.odue != 0 and card.odid != 0
 
 
-# card due is stored in days, starting at some abstract date; this gets today's due
-def get_today() -> int:
-    return mw.col.sched.today
-
-
 def get_card_absolute_due(card: Card) -> int:
     return card.odue if is_card_in_a_filtered_deck(card) else card.due
 
@@ -62,7 +56,24 @@ def get_siblings(card: Card) -> Sequence[Card]:
 ########################################################################################
 
 
-def get_genesis():
+# Anki keeps track of time as follows:
+#  * learning cards have due in epoch;
+#  * reviewing card have due in days, 0 being deck creation day
+#    (called “Anki days” in this project)
+#  * revlog stores review times in epoch regardless
+#
+# Days don't start at midnight, but by the hour of the “Next day starts at” setting.
+# It seems that since user can change it,
+# it is not possible to entirely reliably map historic precise time to Anki time.
+
+
+def get_anki_today() -> int:
+    return mw.col.sched.today
+
+
+# This is based on the most recent “next day starts at” setting,
+# otherwise nearly the same as the result of `select crt from col`.
+def get_collection_genesis_datetime() -> datetime:
     scheduler_timing = mw.col.sched._timing_today()
     next_day_starts_at = datetime.fromtimestamp(scheduler_timing.next_day_at)
     days_elapsed_since_genesis = timedelta(days=scheduler_timing.days_elapsed)
@@ -70,12 +81,6 @@ def get_genesis():
     return today_started_at - days_elapsed_since_genesis
 
 
-@dataclass
-class AnkiDate:
-    epoch: float
-    anki_days: int
-
-    @classmethod
-    def from_epoch(cls, epoch: float):
-        delta = datetime.fromtimestamp(epoch) - get_genesis()
-        return cls(epoch, delta.days)
+def epoch_to_anki_days(epoch: float) -> int:
+    delta = datetime.fromtimestamp(epoch) - get_collection_genesis_datetime()
+    return delta.days

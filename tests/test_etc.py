@@ -75,12 +75,12 @@ def test_menus_get_disabled_enabled(setup):
     assert get_menu_status() == (True, True, True, False)
 
 
-def test_AnkiDate(setup):
-    from delay_siblings.tools import get_today, AnkiDate
+def test_epoch_to_anki_days(setup):
+    from delay_siblings.tools import get_anki_today, epoch_to_anki_days
     next_day_at = aqt.mw.col.sched._timing_today().next_day_at
 
-    assert AnkiDate.from_epoch(next_day_at - 100).anki_days == get_today()
-    assert AnkiDate.from_epoch(next_day_at + 100).anki_days == get_today() + 1
+    assert epoch_to_anki_days(next_day_at - 100) == get_anki_today()
+    assert epoch_to_anki_days(next_day_at + 100) == get_anki_today() + 1
 
 
 class TestConfigMigration:

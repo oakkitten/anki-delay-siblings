@@ -21,11 +21,11 @@ from .tools import (
     is_card_reviewing,
     is_card_suspended,
     get_card_absolute_due,
-    get_today,
+    get_anki_today,
     get_siblings,
     set_card_absolute_due,
     remove_card_from_current_review_queue,
-    AnkiDate,
+    epoch_to_anki_days,
     sorted_by_value,
 )
 
@@ -69,7 +69,7 @@ class Delay:
     new_absolute_due: int
 
 
-def get_delays(siblings: Sequence[Card], last_review_day: int) -> Iterator[Delay]:
+def get_delays(siblings: Sequence[Card], rescheduling_day: int) -> Iterator[Delay]:
     cards_per_note = len(siblings) + 1
 
     for sibling in siblings:
@@ -78,13 +78,13 @@ def get_delays(siblings: Sequence[Card], last_review_day: int) -> Iterator[Delay
 
         sibling_interval = sibling.ivl
         old_absolute_due = get_card_absolute_due(sibling)
-        old_relative_due = old_absolute_due - last_review_day
+        old_relative_due = old_absolute_due - rescheduling_day
         new_relative_due_min, new_relative_due_max = \
             calculate_new_relative_due_range(sibling_interval, cards_per_note)
 
         if new_relative_due_min > 0 and new_relative_due_min > old_relative_due:
             new_relative_due = random.randint(new_relative_due_min, new_relative_due_max)
-            new_absolute_due = last_review_day + new_relative_due
+            new_absolute_due = rescheduling_day + new_relative_due
             yield Delay(sibling, old_absolute_due, new_absolute_due)
 
 
@@ -95,7 +95,7 @@ def get_delays(siblings: Sequence[Card], last_review_day: int) -> Iterator[Delay
 
 def get_delayed_message(delay: Delay):
     question = strip_html(delay.sibling.question())
-    today = get_today()
+    today = get_anki_today()
     interval = delay.sibling.ivl
 
     return (
@@ -111,11 +111,11 @@ def reviewer_did_show_answer(card: Card):
     if not config.enabled_for_current_deck:
         return
 
-    today = get_today()
+    today = get_anki_today()
     siblings = get_siblings(card)
     messages = []
 
-    for delay in get_delays(siblings, last_review_day=today):
+    for delay in get_delays(siblings, rescheduling_day=today):
         set_card_absolute_due(delay.sibling, delay.new_absolute_due)
         remove_card_from_current_review_queue(delay.sibling)
 
@@ -156,15 +156,15 @@ def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLa
     return result
 
 
-def get_delays_after_sync(sync_diff: IdToLastReview) -> Iterator[Delay]:
+def calculate_delays_after_sync(sync_diff: IdToLastReview) -> Iterator[Delay]:
     sync_diff = sorted_by_value(sync_diff)
-    today = get_today()
+    today = get_anki_today()
 
     while sync_diff:
         card_id, last_review_time = sync_diff.popitem()  # last, most recent review
         siblings = get_siblings(mw.col.get_card(card_id))
-        last_review_day = AnkiDate.from_epoch(last_review_time / 1000).anki_days
-        delays = get_delays(siblings, last_review_day)
+        last_review_day = epoch_to_anki_days(last_review_time / 1000)
+        delays = get_delays(siblings, rescheduling_day=last_review_day)
 
         for delay in delays:
             if delay.new_absolute_due > today:
@@ -177,7 +177,7 @@ def get_delays_after_sync(sync_diff: IdToLastReview) -> Iterator[Delay]:
 
 def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
     sync_diff = calculate_sync_diff(before, after)
-    delays = list(get_delays_after_sync(sync_diff))
+    delays = list(calculate_delays_after_sync(sync_diff))
 
     # print(f":: {before=}")
     # print(f":: {after=}")
