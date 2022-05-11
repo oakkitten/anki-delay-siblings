@@ -138,19 +138,17 @@ def reviewer_did_show_answer(card: Card):
 IdToLastReview = "dict[int, int]"
 
 
+# Return those cards that have newer reviews than the ones we recorded before sync.
+# We don't differentiate between regular and full syncs, as the logic remains the same.
+# Note: in the latter case, last review date can change to an earlier one.
 def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLastReview:
     result = {}
 
     for card_id, last_review_after in after.items():
         if card_id in before:
             last_review_before = before[card_id]
-            if last_review_before == last_review_after:
+            if last_review_before >= last_review_after:
                 continue
-            if last_review_before > last_review_after:
-                raise Exception(
-                    f"After sync, last review of {card_id} unexpectedly changed"
-                    f" from {last_review_before} to a lower value {last_review_before}"
-                )
         result[card_id] = last_review_after
 
     return result
