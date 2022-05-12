@@ -13,6 +13,7 @@ from anki.cards import Card
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
+from aqt.qt import QActionGroup
 
 from .delay_after_sync_dialog import user_agrees_to_perform
 
@@ -247,7 +248,6 @@ def set_quiet(checked):
 
 def set_delay_after_sync(value):
     config.delay_after_sync = value
-    adjust_menu()
 
 
 menu_enabled_for_this_deck = checkable(
@@ -261,28 +261,33 @@ menu_quiet = checkable(
 )
 
 menu_delay_without_asking = checkable(
-    title="Delay without asking",
+    title="After sync, delay siblings without asking",
     on_click=lambda _checked: set_delay_after_sync(DELAY_WITHOUT_ASKING)
 )
 
 menu_ask_every_time = checkable(
-    title="Ask every time",
+    title="After sync, ask every time whether to delay siblings or not",
     on_click=lambda _checked: set_delay_after_sync(ASK_EVERY_TIME)
 )
 
 menu_do_not_delay = checkable(
-    title="Do not delay",
+    title="Do not delay siblings after sync",
     on_click=lambda _checked: set_delay_after_sync(DO_NOT_DELAY)
 )
+
+delay_after_sync_group = QActionGroup(mw)
+delay_after_sync_group.addAction(menu_delay_without_asking)
+delay_after_sync_group.addAction(menu_ask_every_time)
+delay_after_sync_group.addAction(menu_do_not_delay)
 
 mw.form.menuTools.addSeparator()
 mw.form.menuTools.addAction(menu_enabled_for_this_deck)
 menu_for_all_decks = mw.form.menuTools.addMenu("For all decks")
 menu_for_all_decks.addAction(menu_quiet)
-menu_delay_after_sync = menu_for_all_decks.addMenu("Delay after sync, if enabled for deck")
-menu_delay_after_sync.addAction(menu_delay_without_asking)
-menu_delay_after_sync.addAction(menu_ask_every_time)
-menu_delay_after_sync.addAction(menu_do_not_delay)
+menu_for_all_decks.addSeparator()
+menu_for_all_decks.addAction(menu_delay_without_asking)
+menu_for_all_decks.addAction(menu_ask_every_time)
+menu_for_all_decks.addAction(menu_do_not_delay)
 
 
 def adjust_menu():
