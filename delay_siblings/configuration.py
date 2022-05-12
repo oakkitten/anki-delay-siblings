@@ -11,8 +11,12 @@ from .tools import get_current_deck_id
 
 ENABLED_FOR_DECKS = "enabled_for_decks"
 QUIET = "quiet"
-OFFER_TO_DELAY_AFTER_SYNC = "offer_to_delay_after_sync"
+DELAY_AFTER_SYNC = "delay_after_sync"
 VERSION = "version"
+
+DELAY_WITHOUT_ASKING = "delay_without_asking"
+ASK_EVERY_TIME = "ask_every_time"
+DO_NOT_DELAY = "do_not_delay"
 
 
 tag = mw.addonManager.addonFromModule(__name__)
@@ -68,12 +72,12 @@ class Config:
         self.save()
 
     @property
-    def offer_to_delay_after_sync(self):
-        return self.data[OFFER_TO_DELAY_AFTER_SYNC]
+    def delay_after_sync(self):
+        return self.data[DELAY_AFTER_SYNC]
 
-    @offer_to_delay_after_sync.setter
-    def offer_to_delay_after_sync(self, value):
-        self.data[OFFER_TO_DELAY_AFTER_SYNC] = value
+    @delay_after_sync.setter
+    def delay_after_sync(self, value):
+        self.data[DELAY_AFTER_SYNC] = value
         self.save()
 
 
@@ -98,7 +102,7 @@ def migrate(data):
             VERSION: 1,
             ENABLED_FOR_DECKS: decks,
             QUIET: quiet,
-            OFFER_TO_DELAY_AFTER_SYNC: True
+            DELAY_AFTER_SYNC: ASK_EVERY_TIME
         }
 
     validate_config(data)

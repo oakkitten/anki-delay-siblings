@@ -4,7 +4,7 @@
     "required": [
         "enabled_for_decks",
         "quiet",
-        "offer_to_delay_after_sync",
+        "delay_after_sync",
         "version"
     ],
     "properties": {
@@ -20,8 +20,13 @@
         "quiet": {
             "type": "boolean"
         },
-        "offer_to_delay_after_sync": {
-            "type": "boolean"
+        "delay_after_sync": {
+            "type": "string",
+            "enum": [
+                "delay_without_asking",
+                "ask_every_time",
+                "do_not_delay"
+            ]
         },
         "version": {
             "const": 1

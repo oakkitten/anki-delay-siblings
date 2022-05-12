@@ -42,8 +42,8 @@ def syncing(for_days: int):
 
 @pytest.fixture
 def on(setup):
-    from delay_siblings import config
-    config.offer_to_delay_after_sync = True
+    from delay_siblings import config, ASK_EVERY_TIME
+    config.delay_after_sync = ASK_EVERY_TIME
 
 
 @pytest.fixture(autouse=True)

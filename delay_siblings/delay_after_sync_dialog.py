@@ -47,3 +47,9 @@ class DelayAfterSyncDialog(QDialog):
     def set_delays(self, delays):
         self.list.clear()
         self.list.addItems(get_delayed_message(delay) for delay in delays)
+
+
+def user_agrees_to_perform(delays):
+    dialog = DelayAfterSyncDialog()
+    dialog.set_delays(delays)
+    return dialog.exec() == QDialog.DialogCode.Accepted

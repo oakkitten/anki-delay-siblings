@@ -11,12 +11,19 @@ from typing import Sequence, Iterator
 
 from anki.cards import Card
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
-from aqt.qt import QAction, QDialog
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 
-from .configuration import Config, run_on_configuration_change
-from .delay_after_sync_dialog import DelayAfterSyncDialog
+from .delay_after_sync_dialog import user_agrees_to_perform
+
+from .configuration import (
+    Config,
+    run_on_configuration_change,
+    DELAY_WITHOUT_ASKING,
+    ASK_EVERY_TIME,
+    DO_NOT_DELAY,
+)
+
 from .tools import (
     is_card_reviewing,
     is_card_suspended,
@@ -27,6 +34,7 @@ from .tools import (
     remove_card_from_current_review_queue,
     epoch_to_anki_days,
     sorted_by_value,
+    checkable,
 )
 
 
@@ -183,14 +191,12 @@ def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
     # print(f":: {delays=}")
 
     if delays:
-        dialog = DelayAfterSyncDialog()
-        dialog.set_delays(delays)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        if config.delay_after_sync == DELAY_WITHOUT_ASKING or user_agrees_to_perform(delays):
             # print(f":: executing")
             for delay in delays:
                 set_card_absolute_due(delay.sibling, delay.new_absolute_due)
 
-            tooltip(f"<span style='color: green'>{len(delays)} cards rescheduled.</span>")
+            tooltip(f"<span style='color: green'>{len(delays)} cards rescheduled</span>")
 
 ########################################################################################
 
@@ -210,14 +216,14 @@ id_to_last_review_before: IdToLastReview = {}
 
 @gui_hooks.sync_will_start.append
 def sync_will_start():
-    if config.offer_to_delay_after_sync:
+    if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
         global id_to_last_review_before
         id_to_last_review_before = get_card_id_to_last_review_time_for_all_cards()
 
 
 @gui_hooks.sync_did_finish.append
 def sync_did_finish():
-    if config.offer_to_delay_after_sync:
+    if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
         global id_to_last_review_before
         id_to_last_review_after = get_card_id_to_last_review_time_for_all_cards()
         perform_historic_delaying(id_to_last_review_before, id_to_last_review_after)
@@ -233,38 +239,60 @@ config = Config()
 config.load()
 
 
-def flip_enabled(checked):
+def set_enabled_for_this_deck(checked):
     config.enabled_for_current_deck = checked
 
-def flip_quiet(checked):
+def set_quiet(checked):
     config.quiet = checked
 
-def flip_offer_to_delay_after_sync(checked):
-    config.offer_to_delay_after_sync = checked
+def set_delay_after_sync(value):
+    config.delay_after_sync = value
+    adjust_menu()
 
 
-menu_enabled = QAction("Enable sibling delaying for this deck", mw, checkable=True, enabled=False)  # noqa
-menu_enabled.triggered.connect(flip_enabled)  # noqa
+menu_enabled_for_this_deck = checkable(
+    title="Enable sibling delaying for this deck",
+    on_click=set_enabled_for_this_deck
+)
 
-menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks", mw, checkable=True)  # noqa
-menu_quiet.triggered.connect(flip_quiet)  # noqa
+menu_quiet = checkable(
+    title="Don’t notify if a card is delayed by less than 2 weeks",
+    on_click=set_quiet
+)
 
-menu_offer_to_delay_after_sync = QAction("Offer to delay after sync, if enabled for deck", mw, checkable=True)  # noqa
-menu_offer_to_delay_after_sync.triggered.connect(flip_offer_to_delay_after_sync)  # noqa
+menu_delay_without_asking = checkable(
+    title="Delay without asking",
+    on_click=lambda _checked: set_delay_after_sync(DELAY_WITHOUT_ASKING)
+)
+
+menu_ask_every_time = checkable(
+    title="Ask every time",
+    on_click=lambda _checked: set_delay_after_sync(ASK_EVERY_TIME)
+)
+
+menu_do_not_delay = checkable(
+    title="Do not delay",
+    on_click=lambda _checked: set_delay_after_sync(DO_NOT_DELAY)
+)
 
 mw.form.menuTools.addSeparator()
-mw.form.menuTools.addAction(menu_enabled)
+mw.form.menuTools.addAction(menu_enabled_for_this_deck)
 menu_for_all_decks = mw.form.menuTools.addMenu("For all decks")
 menu_for_all_decks.addAction(menu_quiet)
-menu_for_all_decks.addAction(menu_offer_to_delay_after_sync)
+menu_delay_after_sync = menu_for_all_decks.addMenu("Delay after sync, if enabled for deck")
+menu_delay_after_sync.addAction(menu_delay_without_asking)
+menu_delay_after_sync.addAction(menu_ask_every_time)
+menu_delay_after_sync.addAction(menu_do_not_delay)
 
 
 def adjust_menu():
     if mw.col is not None:
-        menu_enabled.setEnabled(mw.state in ["overview", "review"])
-        menu_enabled.setChecked(config.enabled_for_current_deck)
+        menu_enabled_for_this_deck.setEnabled(mw.state in ["overview", "review"])
+        menu_enabled_for_this_deck.setChecked(config.enabled_for_current_deck)
         menu_quiet.setChecked(config.quiet)
-        menu_offer_to_delay_after_sync.setChecked(config.offer_to_delay_after_sync)
+        menu_delay_without_asking.setChecked(config.delay_after_sync == DELAY_WITHOUT_ASKING)
+        menu_ask_every_time.setChecked(config.delay_after_sync == ASK_EVERY_TIME)
+        menu_do_not_delay.setChecked(config.delay_after_sync == DO_NOT_DELAY)
 
 
 @gui_hooks.state_did_change.append

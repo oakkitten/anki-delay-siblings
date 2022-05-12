@@ -50,29 +50,34 @@ def test_menus_get_disabled_enabled(setup):
 
     def get_menu_status():
         return (
-            delay_siblings.menu_enabled.isEnabled(),
-            delay_siblings.menu_enabled.isChecked(),
+            delay_siblings.menu_enabled_for_this_deck.isEnabled(),
+            delay_siblings.menu_enabled_for_this_deck.isChecked(),
             delay_siblings.menu_quiet.isChecked(),
-            delay_siblings.menu_offer_to_delay_after_sync.isChecked(),
-
+            delay_siblings.menu_delay_without_asking.isChecked(),
+            delay_siblings.menu_ask_every_time.isChecked(),
+            delay_siblings.menu_do_not_delay.isChecked(),
         )
 
     move_main_window_to_state("deckBrowser")
-    assert get_menu_status() == (False, False, False, True)
+    assert get_menu_status() == (False, False, False, False, True, False)
 
     move_main_window_to_state("overview")
-    assert get_menu_status() == (True, False, False, True)
+    assert get_menu_status() == (True, False, False, False, True, False)
 
-    delay_siblings.menu_enabled.trigger()
-    assert get_menu_status() == (True, True, False, True)
+    delay_siblings.menu_enabled_for_this_deck.trigger()
+    assert get_menu_status() == (True, True, False, False, True, False)
     assert delay_siblings.config.enabled_for_current_deck is True
 
-    move_main_window_to_state("deckBrowser")
     delay_siblings.config.enabled_for_current_deck = True
     delay_siblings.config.quiet = True
-    delay_siblings.config.offer_to_delay_after_sync = False
+    delay_siblings.config.delay_after_sync = delay_siblings.configuration.DO_NOT_DELAY
     move_main_window_to_state("overview")
-    assert get_menu_status() == (True, True, True, False)
+    assert get_menu_status() == (True, True, True, False, False, True)
+
+    delay_siblings.menu_delay_without_asking.trigger()
+    move_main_window_to_state("overview")
+    print(delay_siblings.config.data)
+    assert get_menu_status() == (True, True, True, True, False, False)
 
 
 def test_epoch_to_anki_days(setup):
