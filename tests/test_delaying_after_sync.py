@@ -73,19 +73,30 @@ def test_addon_does_not_reschedule_cards_if_not_enabled_for_deck(setup, on):
     assert card2_old_due == card2_new_due
 
 
+@pytest.mark.parametrize(
+    "sync_after_days",
+    [20, 30],
+    ids=[
+        "delaying done as new due is in the future",
+        "no delaying done as new due would be in the past"
+    ]
+)
 @try_with_all_schedulers
-def test_addon_reschedules_one_card_after_sync_that_brings_one_new_review(setup, on):
+def test_after_sync_that_brings_one_new_review(setup, on, sync_after_days):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
     setup.delay_siblings.config.enabled_for_current_deck = True
 
-    with syncing(for_days=20):
+    with syncing(for_days=sync_after_days):
         review_card1_in_20_days(setup)
 
     card2_new_due = get_card(setup.card2_id).due
-    assert card2_new_due > card2_old_due
-    assert card2_new_due - card2_old_due < 10
+    if sync_after_days == 20:
+        assert card2_new_due > card2_old_due
+        assert card2_new_due - card2_old_due < 10
+    else:
+        assert card2_old_due == card2_new_due
 
 
 @try_with_all_schedulers
@@ -100,21 +111,6 @@ def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setu
     card2_new_due = get_card(setup.card2_id).due
     assert card2_new_due > card2_old_due
     assert card2_new_due - card2_old_due < 10
-
-
-# same as test_addon_reschedules_one_card_after_sync_that_brings_one_new_review, but more days
-@try_with_all_schedulers
-def test_addon_does_not_reschedule_if_new_due_would_be_in_the_past(setup, on):
-    review_cards_in_0_5_10_days(setup)
-    card2_old_due = get_card(setup.card2_id).due
-
-    setup.delay_siblings.config.enabled_for_current_deck = True
-
-    with syncing(for_days=30):
-        review_card1_in_20_days(setup)
-
-    card2_new_due = get_card(setup.card2_id).due
-    assert card2_old_due == card2_new_due
 
 
 @pytest.mark.parametrize(
