@@ -40,12 +40,6 @@ def syncing(for_days: int):
         gui_hooks.sync_did_finish()
 
 
-@pytest.fixture
-def on(setup):
-    from delay_siblings import config, ASK_EVERY_TIME
-    config.delay_after_sync = ASK_EVERY_TIME
-
-
 @pytest.fixture(autouse=True)
 def automatically_accept_the_delay_after_sync_dialog(monkeypatch):
     from delay_siblings.delay_after_sync_dialog import DelayAfterSyncDialog
@@ -60,9 +54,23 @@ def automatically_accept_the_delay_after_sync_dialog(monkeypatch):
 
 ########################################################################################
 
-
+@pytest.mark.parametrize(
+    "only_enabled",
+    ["for_deck", "globally"],
+    ids=[
+        "delaying enabled for deck; delaying after sync disabled",
+        "delaying disabled for deck; delaying after sync enabled"
+    ]
+)
 @try_with_all_schedulers
-def test_addon_does_not_reschedule_cards_if_not_enabled_for_deck(setup, on):
+def test_addon_does_not_reschedule_cards_if_not_enabled(setup, only_enabled):
+    if only_enabled == "for_deck":
+        setup.delay_siblings.config.enabled_for_current_deck = True
+        setup.delay_siblings.config.delay_after_sync = setup.delay_siblings.DO_NOT_DELAY
+    elif only_enabled == "globally":
+        # delay after sync is enabled by default
+        assert setup.delay_siblings.config.delay_after_sync == setup.delay_siblings.ASK_EVERY_TIME
+
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
@@ -82,7 +90,7 @@ def test_addon_does_not_reschedule_cards_if_not_enabled_for_deck(setup, on):
     ]
 )
 @try_with_all_schedulers
-def test_after_sync_that_brings_one_new_review(setup, on, sync_after_days):
+def test_after_sync_that_brings_one_new_review(setup, sync_after_days):
     review_cards_in_0_5_10_days(setup)
     card2_old_due = get_card(setup.card2_id).due
 
@@ -100,7 +108,7 @@ def test_after_sync_that_brings_one_new_review(setup, on, sync_after_days):
 
 
 @try_with_all_schedulers
-def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setup, on):
+def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setup):
     setup.delay_siblings.config.enabled_for_current_deck = True
 
     with syncing(for_days=20):
@@ -122,8 +130,9 @@ def test_addon_reschedules_one_card_after_sync_that_brings_many_new_reviews(setu
     ]
 )
 @try_with_all_schedulers
-def test_addon_does_not_reschedule_if_user_manually_set_card_due(setup, on,
+def test_addon_does_not_reschedule_if_user_manually_set_card_due(setup,
         break_manual_review_detection, monkeypatch):
+
     if break_manual_review_detection:
         original = setup.delay_siblings.get_card_id_to_last_review_time
         def patched(_skip_manual):  # noqa
