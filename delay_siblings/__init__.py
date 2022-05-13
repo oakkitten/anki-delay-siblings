@@ -293,7 +293,7 @@ menu_delay_without_asking = checkable(
 )
 
 menu_ask_every_time = checkable(
-    title="After sync, ask every time whether to delay siblings or not",
+    title="After sync, if any siblings can be delayed, ask whether to delay them or not",
     on_click=lambda _checked: set_delay_after_sync(ASK_EVERY_TIME)
 )
 

@@ -60,10 +60,15 @@ relative to the date of the last review.
 
 You can find the following options in the Tools menu:
 
-* Enable sibling delaying for this deck. 
+* *Enable sibling delaying for this deck*. 
   If the option is greyed out, please choose a deck.
-* For all decks → Don’t notify if a card is delayed by less than 2 weeks. 
+* *For all decks* → *Don’t notify if a card is delayed by less than 2 weeks*. 
   Since only the interval of the sibling is considered, 
   the current card or other siblings can become due close to the sibling.
-  To prevent notification spam, check this option.
-* For all decks → Offer to delay after sync, if enabled for this deck.
+  To prevent tooltip spam, check this option.
+* *For all decks* → *After sync, delay siblings without asking*; 
+  *After sync, if any siblings can be delayed, ask whether to delay them or not*;
+  *Do not delay siblings after sync*. You can choose one of these three options.
+  If you choose to delay siblings after sync one way or the other, 
+  you'll be seeing a confirmation tooltip whenever any siblings get delayed after sync.
+  There will be no tooltip or anything else if no delaying could be performed.
