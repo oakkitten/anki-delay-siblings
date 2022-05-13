@@ -117,15 +117,31 @@ def test_addon_does_not_reschedule_if_new_due_would_be_in_the_past(setup, on):
     assert card2_old_due == card2_new_due
 
 
+@pytest.mark.parametrize(
+    "break_manual_review_detection",
+    [False, pytest.param(True, marks=pytest.mark.xfail)],
+    ids=[
+        "manual review detection not broken",
+        "manual review detection broken (sanity test)"
+    ]
+)
 @try_with_all_schedulers
-def test_addon_does_not_reschedule_if_user_manually_set_card_due(setup, on):
+def test_addon_does_not_reschedule_if_user_manually_set_card_due(setup, on,
+        break_manual_review_detection, monkeypatch):
+    if break_manual_review_detection:
+        original = setup.delay_siblings.get_card_id_to_last_review_time
+        def patched(_skip_manual):  # noqa
+            return original(skip_manual=False)
+        monkeypatch.setattr(setup.delay_siblings, "get_card_id_to_last_review_time", patched)
+
+    review_cards_in_0_5_10_days(setup)
+    card2_old_due = get_card(setup.card2_id).due
+
     setup.delay_siblings.config.enabled_for_current_deck = True
 
     with syncing(for_days=20):
-        review_cards_in_0_5_10_days(setup)
         with clock_set_forward_by(days=20):
             get_scheduler().set_due_date(card_ids=[setup.card1_id], days="0")
-        card2_old_due = get_card(setup.card2_id).due
 
     card2_new_due = get_card(setup.card2_id).due
     assert card2_old_due == card2_new_due
