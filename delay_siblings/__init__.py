@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Sequence, Iterator
 
 from anki.cards import Card
+from anki.consts import REVLOG_RESCHED
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
@@ -147,9 +148,26 @@ def reviewer_did_show_answer(card: Card):
 IdToLastReview = "dict[int, int]"
 
 
-# Return those cards that have newer reviews than the ones we recorded before sync.
-# We don't differentiate between regular and full syncs, as the logic remains the same.
-# Note: in the latter case, last review date can change to an earlier one.
+# This receives two dictionaries:
+#   * card id to last review time (in milliseconds) before sync, and
+#   * the same after sync, *but* without any cards that have their last review
+#     done not via actual reviewing, but via user's manually choosing “Set due date…”,
+# and yields those cards that have newer reviews than the ones we recorded before sync.
+#
+# This also runs in case of full sync. Why? Well, why not?
+# There's plenty of scenarios in which such a sync, from our point of view,
+# is indistinguishable from a regular one, for instance,
+# when user merely deletes a note type—this requires a full sync.
+# Please let me know if you think of a scenario when this is dangerous!
+#
+# You could ask, why does the `before` dictionary include manual reschedules?
+# Well, imagine this scenario:
+#  * before sync, we have a card with a manual reschedule on May 8th, and
+#  * after we have the same card with a regular review on May 1st.
+# If both `before` and `after` dictionaries stripped manual reviews,
+# this card would be subject to sibling delaying.
+# It is not clear what we should be doing with such a card,
+# since the scenario a bit too crazy. So err on the side of caution and skip it.
 def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLastReview:
     result = {}
 
@@ -202,14 +220,23 @@ def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
 ########################################################################################
 
 
-# noinspection PyTypeChecker
-def get_card_id_to_last_review_time_for_all_cards() -> IdToLastReview:
-    return dict(mw.col.db.all(f"""
-        select revlog.cid, max(revlog.id)
+def get_card_id_to_last_review_time(skip_manual: bool) -> IdToLastReview:
+    with_manual_reviews = f"""
+        select revlog.cid as card_id, max(revlog.id) as last_review
         from (revlog inner join cards on cards.id = revlog.cid)
         where cards.did in ({",".join(config.enabled_for_deck_ids)})
         group by revlog.cid
-    """))
+    """
+
+    without_manual_reviews = f"""
+        select card_id, last_review
+        from (({with_manual_reviews}) inner join revlog on last_review = revlog.id)
+        where revlog.type != {REVLOG_RESCHED}
+    """
+
+    return dict(mw.col.db.all(  # noqa
+        without_manual_reviews if skip_manual else with_manual_reviews
+    ))
 
 
 id_to_last_review_before: IdToLastReview = {}
@@ -219,14 +246,14 @@ id_to_last_review_before: IdToLastReview = {}
 def sync_will_start():
     if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
         global id_to_last_review_before
-        id_to_last_review_before = get_card_id_to_last_review_time_for_all_cards()
+        id_to_last_review_before = get_card_id_to_last_review_time(skip_manual=False)
 
 
 @gui_hooks.sync_did_finish.append
 def sync_did_finish():
     if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
         global id_to_last_review_before
-        id_to_last_review_after = get_card_id_to_last_review_time_for_all_cards()
+        id_to_last_review_after = get_card_id_to_last_review_time(skip_manual=True)
         perform_historic_delaying(id_to_last_review_before, id_to_last_review_after)
         id_to_last_review_before = {}
 

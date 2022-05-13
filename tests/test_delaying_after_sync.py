@@ -11,7 +11,7 @@ from tests.conftest import (
 
 from tests.tools.collection import (
     get_card,
-    clock_set_forward_by,
+    clock_set_forward_by, get_scheduler,
 )
 
 
@@ -112,6 +112,20 @@ def test_addon_does_not_reschedule_if_new_due_would_be_in_the_past(setup, on):
 
     with syncing(for_days=30):
         review_card1_in_20_days(setup)
+
+    card2_new_due = get_card(setup.card2_id).due
+    assert card2_old_due == card2_new_due
+
+
+@try_with_all_schedulers
+def test_addon_does_not_reschedule_if_user_manually_set_card_due(setup, on):
+    setup.delay_siblings.config.enabled_for_current_deck = True
+
+    with syncing(for_days=20):
+        review_cards_in_0_5_10_days(setup)
+        with clock_set_forward_by(days=20):
+            get_scheduler().set_due_date(card_ids=[setup.card1_id], days="0")
+        card2_old_due = get_card(setup.card2_id).due
 
     card2_new_due = get_card(setup.card2_id).due
     assert card2_old_due == card2_new_due
