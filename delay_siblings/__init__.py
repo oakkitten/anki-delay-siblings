@@ -217,25 +217,27 @@ def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
 
             tooltip(f"<span style='color: green'>{len(delays)} cards rescheduled</span>")
 
+
 ########################################################################################
 
 
 def get_card_id_to_last_review_time(skip_manual: bool) -> IdToLastReview:
-    with_manual_reviews = f"""
-        select revlog.cid as card_id, max(revlog.id) as last_review
-        from (revlog inner join cards on cards.id = revlog.cid)
-        where cards.did in ({",".join(config.enabled_for_deck_ids)})
-        group by revlog.cid
-    """
-
-    without_manual_reviews = f"""
-        select card_id, last_review
-        from (({with_manual_reviews}) inner join revlog on last_review = revlog.id)
-        where revlog.type != {REVLOG_RESCHED}
-    """
+    wanted_deck_ids = "(" + ",".join(config.enabled_for_deck_ids) + ")"
 
     return dict(mw.col.db.all(  # noqa
-        without_manual_reviews if skip_manual else with_manual_reviews
+        f"""
+            WITH wanted_cards AS 
+                    (SELECT id FROM cards WHERE did IN {wanted_deck_ids}),
+                 wanted_revlog_ids AS 
+                    (SELECT max(id) FROM revlog WHERE cid IN wanted_cards GROUP BY cid)
+            SELECT cid, id FROM revlog
+            WHERE id IN wanted_revlog_ids AND type != {REVLOG_RESCHED}
+        """ if skip_manual else f"""
+            WITH wanted_cards AS 
+                (SELECT id FROM cards WHERE did IN {wanted_deck_ids})
+            SELECT cid, max(id) FROM revlog
+            WHERE cid IN wanted_cards GROUP BY cid
+        """
     ))
 
 
