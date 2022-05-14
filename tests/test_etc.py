@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import aqt
 import pytest
+from aqt.qt import QRect, QItemSelectionModel
 
 from tests.conftest import (
     try_with_all_schedulers,
@@ -9,7 +10,7 @@ from tests.conftest import (
     show_answer_of_card1_in_20_days,
 )
 
-from tests.tools.collection import move_main_window_to_state
+from tests.tools.collection import move_main_window_to_state, get_card
 
 
 @pytest.mark.parametrize(
@@ -107,3 +108,23 @@ class TestConfigMigration:
         data = {"version": 0, 123: {"a": "b"}}
         data = setup.delay_siblings.configuration.migrate_data_restoring_default_config_on_error(data)
         assert data == setup.delay_siblings.configuration.load_default_config()
+
+
+def test_opening_browser_from_delay_dialog(setup):
+    from delay_siblings import Delay, DelayAfterSyncDialog
+
+    delay = Delay(get_card(setup.card2_id), 123, 456)
+    dialog = DelayAfterSyncDialog(delays=[delay], on_accepted=lambda: None)
+    dialog.show()
+
+    dialog.list.setSelection(QRect(1, 1, 1, 1), QItemSelectionModel.SelectionFlag.Select)
+    dialog.list_item_double_clicked()
+
+    # should be the 2nd card in the list... hopefully
+    browser = aqt.dialogs._dialogs["Browser"][1]
+    assert browser.table.get_selected_card_ids() == [setup.card2_id]
+
+    browser.table.select_all()
+    assert {*browser.table.get_selected_card_ids()} == {setup.card1_id, setup.card2_id}
+
+    dialog.reject()

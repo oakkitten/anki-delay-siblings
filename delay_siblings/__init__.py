@@ -16,7 +16,7 @@ from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 from aqt.qt import QActionGroup
 
-from .delay_after_sync_dialog import user_agrees_to_perform
+from .delay_after_sync_dialog import DelayAfterSyncDialog
 
 from .configuration import (
     Config,
@@ -200,22 +200,20 @@ def calculate_delays_after_sync(sync_diff: IdToLastReview) -> Iterator[Delay]:
                 sync_diff.pop(sibling.id)
 
 
-def perform_historic_delaying(before: IdToLastReview, after: IdToLastReview):
+def perform_delay_after_sync(before: IdToLastReview, after: IdToLastReview):
     sync_diff = calculate_sync_diff(before, after)
     delays = list(calculate_delays_after_sync(sync_diff))
 
-    # print(f":: {before=}")
-    # print(f":: {after=}")
-    # print(f":: {sync_diff=}")
-    # print(f":: {delays=}")
-
     if delays:
-        if config.delay_after_sync == DELAY_WITHOUT_ASKING or user_agrees_to_perform(delays):
-            # print(f":: executing")
+        def apply_delays():
             for delay in delays:
                 set_card_absolute_due(delay.sibling, delay.new_absolute_due)
-
             tooltip(f"<span style='color: green'>{len(delays)} cards rescheduled</span>")
+
+        if config.delay_after_sync == DELAY_WITHOUT_ASKING:
+            apply_delays()
+        else:
+            DelayAfterSyncDialog(delays=delays, on_accepted=apply_delays).show()
 
 
 ########################################################################################
@@ -256,7 +254,7 @@ def sync_did_finish():
     if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
         global id_to_last_review_before
         id_to_last_review_after = get_card_id_to_last_review_time(skip_manual=True)
-        perform_historic_delaying(id_to_last_review_before, id_to_last_review_after)
+        perform_delay_after_sync(id_to_last_review_before, id_to_last_review_after)
         id_to_last_review_before = {}
 
 

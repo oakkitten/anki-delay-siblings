@@ -43,13 +43,13 @@ def syncing(for_days: int):
 @pytest.fixture(autouse=True)
 def automatically_accept_the_delay_after_sync_dialog(monkeypatch):
     from delay_siblings.delay_after_sync_dialog import DelayAfterSyncDialog
+    original_show = DelayAfterSyncDialog.show
 
-    def new_exec(self):
-        self.show()
+    def new_show(self):
+        original_show(self)
         self.accept()
-        return self.result()
 
-    monkeypatch.setattr(DelayAfterSyncDialog, "exec", new_exec)
+    monkeypatch.setattr(DelayAfterSyncDialog, "show", new_show)
 
 
 ########################################################################################

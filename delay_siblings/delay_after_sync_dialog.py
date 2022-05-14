@@ -18,12 +18,17 @@ def get_delayed_message(delay):
 
 # noinspection PyAttributeOutsideInit
 class DelayAfterSyncDialog(QDialog):
-    def __init__(self):
+    def __init__(self, delays, on_accepted):
         super().__init__(aqt.mw)  # noqa
         aqt.mw.garbage_collect_on_dialog_finish(self)
         self.setWindowTitle("Delay siblings")
         self.resize(500, 300)
         self.create_interface()
+
+        self.delays = delays
+        self.on_accepted = on_accepted
+
+        self.list.addItems(get_delayed_message(delay) for delay in delays)
 
     def create_interface(self):
         layout = QVBoxLayout(self)
@@ -32,9 +37,10 @@ class DelayAfterSyncDialog(QDialog):
 
         label = QLabel("After sync, I found some siblings that "
                        "should have been delayed. Delay now?")
-        layout.addWidget(label)
+        layout.addWidget(label)  # noqa
 
         self.list = QListWidget(self)
+        qconnect(self.list.doubleClicked, self.list_item_double_clicked)
         layout.addWidget(self.list)  # noqa
 
         button_box = QDialogButtonBox(self)
@@ -44,12 +50,21 @@ class DelayAfterSyncDialog(QDialog):
         qconnect(cancel_button.clicked, self.reject)
         layout.addWidget(button_box)  # noqa
 
-    def set_delays(self, delays):
-        self.list.clear()
-        self.list.addItems(get_delayed_message(delay) for delay in delays)
+    # Open browser and show all cards for the selected note,
+    # with the sibling that's being rescheduled selected.
+    # Passing `card` to Browser should in theory cause it to select the said card,
+    # however in practice it seems that this functionality is broken.
+    # So we use a trick; show one card, and then show all. Browser will keep selection.
+    #
+    # This is a bit dangerous since in Browser user can edit or even delete cards.
+    # Let's just hope they won't do any of such nonsense, handling it would be hard.
+    def list_item_double_clicked(self):
+        index = self.list.selectedIndexes()[0].row()
+        sibling = self.delays[index].sibling
+        browser = aqt.dialogs.open("Browser", aqt.mw)
+        browser.search_for(f"cid:{sibling.id}")
+        browser.search_for(f"nid:{sibling.nid}")
 
-
-def user_agrees_to_perform(delays):
-    dialog = DelayAfterSyncDialog()
-    dialog.set_delays(delays)
-    return dialog.exec() == QDialog.DialogCode.Accepted
+    def accept(self):
+        super().accept()
+        self.on_accepted()
