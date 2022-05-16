@@ -19,16 +19,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Change to latest version
-        run: |
-          export LATEST=$(pip index --pre versions aqt | perl -ne 'm/aqt \((2.1.[a-z0-9]+)\)/ && print "$1"')
-          sed -i -r "s/ankilatest: (anki|aqt\[qt6\])==2.1.[a-z0-9]+/ankilatest: \1==$LATEST/g" tox.ini
-          echo "LATEST=$LATEST" >> "$GITHUB_ENV"
+      - name: Add and update test environments
+        run: python .github/workflows/latest.py
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.KITTENOAK_PAT }}
           push-to-fork: kittenoak/anki-delay-siblings
-          title: Update latest Anki version to ${{ env.LATEST }}
-          commit-message: Update latest Anki version to ${{ env.LATEST }}
+          title: ${{ env.PR_TITLE }}
+          commit-message: ${{ env.COMMIT_MESSAGE }}
