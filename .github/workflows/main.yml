@@ -18,6 +18,12 @@ jobs:
           - name: Anki 2.1.51 (Qt6)
             python: 3.9
             environment: py39-anki51qt6
+          - name: Anki 2.1.52 (Qt5)
+            python: 3.9
+            environment: py39-anki52qt5
+          - name: Anki 2.1.52 (Qt6)
+            python: 3.9
+            environment: py39-anki52qt6
           - name: Latest Anki
             python: 3.9
             environment: py39-ankilatest
