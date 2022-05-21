@@ -12,15 +12,18 @@ hasn't been touched for a while and thus has a lot of siblings due
 simultaneously.
 
 This script displays a notification whenever it's rescheduling a card,
-unless you disable it, for example:
+unless you disable it, like this:
 
 ![notification example](notification.png)
 
 While this script only works inside the desktop version of Anki,
 if configured, it will also offer to reschedule siblings of cards
-that were changed during synchronization with AnkiWeb.
+that were changed during synchronization with AnkiWeb:
+
+![delay after sync dialog example](delay-after-sync-dialog.png)
+
 In this case, you probably want to synchronize your devices and Anki desktop daily,
-and it might be wise to enable the option “Bury review siblings“ 
+and it might be wise to enable the option “Bury review siblings” 
 in Deck preferences (aka “Bury related reviews”).
 
 ### How it works
