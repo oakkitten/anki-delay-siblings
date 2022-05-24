@@ -67,15 +67,15 @@ jobs:
     - name: Assemble the add-on
       run: |
         export VERSION="$(git describe --long)"
-        cd anki_wallpaper
-        sed -i -r "s/# Wallpaper/\0 <version>$VERSION<\/version>/" config.md
-        zip -r ../anki-wallpaper.ankiaddon *
-        echo ASSET_NAME="anki-wallpaper-$VERSION.ankiaddon" >> "$GITHUB_ENV"
+        cd delay_siblings
+        sed -i -r "s/# Delay siblings/\0 <version>$VERSION<\/version>/" config.md
+        zip -r ../delay-siblings.ankiaddon *
+        echo ASSET_NAME="delay-siblings-$VERSION.ankiaddon" >> "$GITHUB_ENV"
 
     - name: Store artifact
       uses: svenstaro/upload-release-action@v2
       with:
         tag: ${{ github.ref }}
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: anki-wallpaper.ankiaddon
+        file: delay-siblings.ankiaddon
         asset_name: ${{ env.ASSET_NAME }}
