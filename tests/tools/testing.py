@@ -238,4 +238,8 @@ def session_with_profile_loaded(session_scope_empty_session, request):
         )
         with current_decks_and_models_etc_preserved():
             yield session
-            wait(0)
+
+    for addon_name, _ in addons_to_copy_into_anki_addons_folders:
+        reset_addon_configuration(addon_name)
+
+    wait(0)

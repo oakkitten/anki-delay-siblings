@@ -1,0 +1,36 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "required": [
+        "enabled_for_decks",
+        "quiet",
+        "delay_after_sync",
+        "version"
+    ],
+    "properties": {
+        "enabled_for_decks": {
+            "type": "object",
+            "patternProperties": {
+                "^\\d+$": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
+        "quiet": {
+            "type": "boolean"
+        },
+        "delay_after_sync": {
+            "type": "string",
+            "enum": [
+                "delay_without_asking",
+                "ask_every_time",
+                "do_not_delay"
+            ]
+        },
+        "version": {
+            "const": 1
+        }
+
+    }
+}

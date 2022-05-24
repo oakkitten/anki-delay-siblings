@@ -7,16 +7,40 @@
 import random
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import Sequence, Iterator
 
 from anki.cards import Card
+from anki.consts import REVLOG_RESCHED
 from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
-from anki.consts import QUEUE_TYPE_SUSPENDED, CARD_TYPE_REV as CARD_TYPE_REVIEWING
-from aqt.qt import QAction
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
+from aqt.qt import QActionGroup
+
+from .delay_after_sync_dialog import DelayAfterSyncDialog
+
+from .configuration import (
+    Config,
+    run_on_configuration_change,
+    DELAY_WITHOUT_ASKING,
+    ASK_EVERY_TIME,
+    DO_NOT_DELAY,
+)
+
+from .tools import (
+    is_card_reviewing,
+    is_card_suspended,
+    get_card_absolute_due,
+    get_anki_today,
+    get_siblings,
+    set_card_absolute_due,
+    remove_card_from_current_review_queue,
+    epoch_to_anki_days,
+    sorted_by_value,
+    checkable,
+)
 
 
-# interval → ranges for 2; 3 cards per note:
+# Interval → ranges for 2; 3 cards per note:
 #    0 →    0-0;   0-0
 #    1 →    0-0;   0-0
 #    2 →    1-1;   0-0
@@ -48,178 +72,267 @@ def calculate_new_relative_due_range(interval: int, cards_per_note: int) -> (int
     return int(round(f)), int(round(f * 1.3))
 
 
-def is_card_suspended(card: Card) -> bool:
-    return card.queue == QUEUE_TYPE_SUSPENDED
-
-# todo also reschedule learning/relearning cards?
-def is_card_reviewing(card: Card) -> bool:
-    return card.type == CARD_TYPE_REVIEWING
-
-def is_card_in_a_filtered_deck(card: Card) -> bool:
-    return card.odue != 0 and card.odid != 0
-
-
-# card due is stored in days, starting at some abstract date; this gets today's due
-def get_today() -> int:
-    return mw.col.sched.today
-
-def get_card_absolute_due(card: Card) -> int:
-    return card.odue if is_card_in_a_filtered_deck(card) else card.due
-
-def set_card_absolute_due(card: Card, absolute_due: int):
-    if is_card_in_a_filtered_deck(card):
-        card.odue = absolute_due
-    else:
-        card.due = absolute_due
-    card.flush()
-
-
-def remove_card_from_current_review_queue(card: Card):
-    with suppress(AttributeError, ValueError):
-        mw.col.sched._revQueue.remove(card.id)  # noqa
-
-
-# see https://github.com/ankitects/anki/blob/6ecf2ffa/pylib/anki/sched.py#L985-L986
-def get_siblings(card: Card) -> "list[Card]":
-    card_ids = card.col.db.list("select id from cards where nid=? and id!=?",
-                                card.nid, card.id)
-    return [mw.col.get_card(card_id) for card_id in card_ids]
-
-
 @dataclass
-class Reschedule:
+class Delay:
     sibling: Card
     old_absolute_due: int
     new_absolute_due: int
 
 
-def get_pending_sibling_reschedules(card: Card) -> "list[Reschedule]":
-    today = get_today()
-    siblings = get_siblings(card)
+def get_delays(siblings: Sequence[Card], rescheduling_day: int) -> Iterator[Delay]:
     cards_per_note = len(siblings) + 1
 
     for sibling in siblings:
-        if is_card_reviewing(sibling) and not is_card_suspended(sibling):
-            sibling_interval = sibling.ivl
-            old_relative_due = get_card_absolute_due(sibling) - today
-            new_relative_due_min, new_relative_due_max = \
-                calculate_new_relative_due_range(sibling_interval, cards_per_note)
+        if not is_card_reviewing(sibling) or is_card_suspended(sibling):
+            continue
 
-            if new_relative_due_min > 0 and new_relative_due_min > old_relative_due:
-                new_relative_due = random.randint(new_relative_due_min, new_relative_due_max)
-                yield Reschedule(sibling, today + old_relative_due, today + new_relative_due)
+        sibling_interval = sibling.ivl
+        old_absolute_due = get_card_absolute_due(sibling)
+        old_relative_due = old_absolute_due - rescheduling_day
+        new_relative_due_min, new_relative_due_max = \
+            calculate_new_relative_due_range(sibling_interval, cards_per_note)
+
+        if new_relative_due_min > 0 and new_relative_due_min > old_relative_due:
+            new_relative_due = random.randint(new_relative_due_min, new_relative_due_max)
+            new_absolute_due = rescheduling_day + new_relative_due
+            yield Delay(sibling, old_absolute_due, new_absolute_due)
 
 
-def get_reschedule_message(reschedule: Reschedule):
-    question = strip_html(reschedule.sibling.question())
-    today = get_today()
-    interval = reschedule.sibling.ivl
+########################################################################################
+############################################################################### reviewer
+########################################################################################
+
+
+def get_delayed_message(delay: Delay):
+    question = strip_html(delay.sibling.question())
+    today = get_anki_today()
+    interval = delay.sibling.ivl
 
     return (
         f"Sibling: {question} (interval: <b>{interval}</b> days)<br>"
-        f"Rescheduling: <b>{reschedule.old_absolute_due - today}</b> → "
-        f"<span style='color: crimson'><b>{reschedule.new_absolute_due - today}</b></span> "
+        f"Rescheduling: <b>{delay.old_absolute_due - today}</b> → "
+        f"<span style='color: crimson'><b>{delay.new_absolute_due - today}</b></span> "
         f"days after today"
     )
 
 
+@gui_hooks.reviewer_did_show_answer.append
 def reviewer_did_show_answer(card: Card):
-    if not config.current_deck.enabled:
+    if not config.enabled_for_current_deck:
         return
 
-    today = get_today()
+    today = get_anki_today()
+    siblings = get_siblings(card)
     messages = []
 
-    for reschedule in get_pending_sibling_reschedules(card):
-        set_card_absolute_due(reschedule.sibling, reschedule.new_absolute_due)
-        remove_card_from_current_review_queue(reschedule.sibling)
+    for delay in get_delays(siblings, rescheduling_day=today):
+        set_card_absolute_due(delay.sibling, delay.new_absolute_due)
+        remove_card_from_current_review_queue(delay.sibling)
 
         if (
-            reschedule.new_absolute_due - max(reschedule.old_absolute_due, today) >= 14
-            or not config.current_deck.quiet
+            delay.new_absolute_due - max(delay.old_absolute_due, today) >= 14
+            or not config.quiet
         ):
-            messages.append(get_reschedule_message(reschedule))
+            messages.append(get_delayed_message(delay))
 
     if messages:
         tooltip(f"<span style='color: green'>{'<hr>'.join(messages)}</span>")
 
 
-########################################################################## configuration
+########################################################################################
+####################################################################### delay after sync
+########################################################################################
 
 
-ENABLED = "enabled"
-QUIET = "quiet"
+# Card id to last review time, the latter in epoch milliseconds
+IdToLastReview = "dict[int, int]"
 
 
-def make_property(name):
-    def getter(self):
-        return self.deck_data[name]
+# This receives two dictionaries:
+#   * card id to last review time (in milliseconds) before sync, and
+#   * the same after sync, *but* without any cards that have their last review
+#     done not via actual reviewing, but via user's manually choosing “Set due date…”,
+# and yields those cards that have newer reviews than the ones we recorded before sync.
+#
+# This also runs in case of full sync. Why? Well, why not?
+# There's plenty of scenarios in which such a sync, from our point of view,
+# is indistinguishable from a regular one, for instance,
+# when user merely deletes a note type—this requires a full sync.
+# Please let me know if you think of a scenario when this is dangerous!
+#
+# You could ask, why does the `before` dictionary include manual reschedules?
+# Well, imagine this scenario:
+#  * before sync, we have a card with a manual reschedule on May 8th, and
+#  * after we have the same card with a regular review on May 1st.
+# If both `before` and `after` dictionaries stripped manual reviews,
+# this card would be subject to sibling delaying.
+# It is not clear what we should be doing with such a card,
+# since the scenario a bit too crazy. So err on the side of caution and skip it.
+def calculate_sync_diff(before: IdToLastReview, after: IdToLastReview) -> IdToLastReview:
+    result = {}
 
-    def setter(self, value):
-        self.deck_data[name] = value
-        self.config.save()
+    for card_id, last_review_after in after.items():
+        if card_id in before:
+            last_review_before = before[card_id]
+            if last_review_before >= last_review_after:
+                continue
+        result[card_id] = last_review_after
 
-    return property(getter, setter)
-
-class DeckConfig:
-    def __init__(self, cfg, deck_id):
-        self.config = cfg
-        self.deck_data = cfg.data.setdefault(str(deck_id), {ENABLED: False, QUIET: False})
-
-    enabled = make_property(ENABLED)
-    quiet = make_property(QUIET)
+    return result
 
 
-class Config:
-    def __init__(self):
-        self.data = mw.addonManager.getConfig(__name__) or {}
-        self.current_deck = DeckConfig(self, 0)
+def calculate_delays_after_sync(sync_diff: IdToLastReview) -> Iterator[Delay]:
+    sync_diff = sorted_by_value(sync_diff)
+    today = get_anki_today()
 
-    def save(self):
-        mw.addonManager.writeConfig(__name__, self.data)
+    while sync_diff:
+        card_id, last_review_time = sync_diff.popitem()  # last, most recent review
+        siblings = get_siblings(mw.col.get_card(card_id))
+        last_review_day = epoch_to_anki_days(last_review_time / 1000)
+        delays = get_delays(siblings, rescheduling_day=last_review_day)
 
-    def set_current_deck_id(self, deck_id):
-        self.current_deck = DeckConfig(self, deck_id)
+        for delay in delays:
+            if delay.new_absolute_due > today:
+                yield delay
+
+        for sibling in siblings:
+            with suppress(KeyError):
+                sync_diff.pop(sibling.id)
+
+
+def perform_delay_after_sync(before: IdToLastReview, after: IdToLastReview):
+    sync_diff = calculate_sync_diff(before, after)
+    delays = list(calculate_delays_after_sync(sync_diff))
+
+    if delays:
+        def apply_delays():
+            for delay in delays:
+                set_card_absolute_due(delay.sibling, delay.new_absolute_due)
+            tooltip(f"<span style='color: green'>{len(delays)} cards rescheduled</span>")
+
+        if config.delay_after_sync == DELAY_WITHOUT_ASKING:
+            apply_delays()
+        else:
+            DelayAfterSyncDialog(delays=delays, on_accepted=apply_delays).show()
+
+
+########################################################################################
+
+
+def get_card_id_to_last_review_time(skip_manual: bool) -> IdToLastReview:
+    wanted_deck_ids = "(" + ",".join(config.enabled_for_deck_ids) + ")"
+
+    return dict(mw.col.db.all(  # noqa
+        f"""
+            WITH wanted_cards AS 
+                    (SELECT id FROM cards WHERE did IN {wanted_deck_ids}),
+                 wanted_revlog_ids AS 
+                    (SELECT max(id) FROM revlog WHERE cid IN wanted_cards GROUP BY cid)
+            SELECT cid, id FROM revlog
+            WHERE id IN wanted_revlog_ids AND type != {REVLOG_RESCHED}
+        """ if skip_manual else f"""
+            WITH wanted_cards AS 
+                (SELECT id FROM cards WHERE did IN {wanted_deck_ids})
+            SELECT cid, max(id) FROM revlog
+            WHERE cid IN wanted_cards GROUP BY cid
+        """
+    ))
+
+
+id_to_last_review_before: IdToLastReview = {}
+
+
+@gui_hooks.sync_will_start.append
+def sync_will_start():
+    if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
+        global id_to_last_review_before
+        id_to_last_review_before = get_card_id_to_last_review_time(skip_manual=False)
+
+
+@gui_hooks.sync_did_finish.append
+def sync_did_finish():
+    if config.delay_after_sync in [DELAY_WITHOUT_ASKING, ASK_EVERY_TIME]:
+        global id_to_last_review_before
+        id_to_last_review_after = get_card_id_to_last_review_time(skip_manual=True)
+        perform_delay_after_sync(id_to_last_review_before, id_to_last_review_after)
+        id_to_last_review_before = {}
+
+
+########################################################################################
+################################################################ menus and configuration
+########################################################################################
+
 
 config = Config()
+config.load()
 
 
-######################################################################## menus and hooks
+def set_enabled_for_this_deck(checked):
+    config.enabled_for_current_deck = checked
+
+def set_quiet(checked):
+    config.quiet = checked
+
+def set_delay_after_sync(value):
+    config.delay_after_sync = value
 
 
-def flip_enabled(_key):
-    config.current_deck.enabled = not config.current_deck.enabled
-    menu_quiet.setEnabled(config.current_deck.enabled)
+menu_enabled_for_this_deck = checkable(
+    title="Enable sibling delaying for this deck",
+    on_click=set_enabled_for_this_deck
+)
 
+menu_quiet = checkable(
+    title="Don’t notify if a card is delayed by less than 2 weeks",
+    on_click=set_quiet
+)
 
-def flip_quiet(_key):
-    config.current_deck.quiet = not config.current_deck.quiet
+menu_delay_without_asking = checkable(
+    title="After sync, delay siblings without asking",
+    on_click=lambda _checked: set_delay_after_sync(DELAY_WITHOUT_ASKING)
+)
 
+menu_ask_every_time = checkable(
+    title="After sync, if any siblings can be delayed, ask whether to delay them or not",
+    on_click=lambda _checked: set_delay_after_sync(ASK_EVERY_TIME)
+)
 
-menu_enabled = QAction("Enable sibling delaying",  # noqa
-                       mw, checkable=True, enabled=False)  # noqa
-menu_enabled.triggered.connect(flip_enabled)  # noqa
+menu_do_not_delay = checkable(
+    title="Do not delay siblings after sync",
+    on_click=lambda _checked: set_delay_after_sync(DO_NOT_DELAY)
+)
 
-menu_quiet = QAction("Don’t notify if a card is delayed by less than 2 weeks",  # noqa
-                     mw, checkable=True, enabled=False)  # noqa
-menu_quiet.triggered.connect(flip_quiet)  # noqa
+delay_after_sync_group = QActionGroup(mw)
+delay_after_sync_group.addAction(menu_delay_without_asking)
+delay_after_sync_group.addAction(menu_ask_every_time)
+delay_after_sync_group.addAction(menu_do_not_delay)
 
 mw.form.menuTools.addSeparator()
-mw.form.menuTools.addAction(menu_enabled)
-mw.form.menuTools.addAction(menu_quiet)
+mw.form.menuTools.addAction(menu_enabled_for_this_deck)
+menu_for_all_decks = mw.form.menuTools.addMenu("For all decks")
+menu_for_all_decks.addAction(menu_quiet)
+menu_for_all_decks.addSeparator()
+menu_for_all_decks.addAction(menu_delay_without_asking)
+menu_for_all_decks.addAction(menu_ask_every_time)
+menu_for_all_decks.addAction(menu_do_not_delay)
 
 
-def state_did_change(next_state: str, _previous_state):
-    if next_state in ["overview", "review"]:
-        config.set_current_deck_id(mw.col.decks.get_current_id())
-        menu_enabled.setEnabled(True)
-    else:
-        config.set_current_deck_id(0)
-        menu_enabled.setEnabled(False)
-    menu_enabled.setChecked(config.current_deck.enabled)
-    menu_quiet.setChecked(config.current_deck.quiet)
-    menu_quiet.setEnabled(config.current_deck.enabled)
+def adjust_menu():
+    if mw.col is not None:
+        menu_enabled_for_this_deck.setEnabled(mw.state in ["overview", "review"])
+        menu_enabled_for_this_deck.setChecked(config.enabled_for_current_deck)
+        menu_quiet.setChecked(config.quiet)
+        menu_delay_without_asking.setChecked(config.delay_after_sync == DELAY_WITHOUT_ASKING)
+        menu_ask_every_time.setChecked(config.delay_after_sync == ASK_EVERY_TIME)
+        menu_do_not_delay.setChecked(config.delay_after_sync == DO_NOT_DELAY)
 
 
-gui_hooks.reviewer_did_show_answer.append(reviewer_did_show_answer)
-gui_hooks.state_did_change.append(state_did_change)
+@gui_hooks.state_did_change.append
+def state_did_change(_next_state, _previous_state):
+    adjust_menu()
+
+
+@run_on_configuration_change
+def configuration_changed():
+    config.load()
+    adjust_menu()

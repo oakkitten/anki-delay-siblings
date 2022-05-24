@@ -12,9 +12,19 @@ hasn't been touched for a while and thus has a lot of siblings due
 simultaneously.
 
 This script displays a notification whenever it's rescheduling a card,
-unless you disable it, for example:
+unless you disable it, like this:
 
 ![notification example](notification.png)
+
+While this script only works inside the desktop version of Anki,
+if configured, it will also offer to reschedule siblings of cards
+that were changed during synchronization with AnkiWeb:
+
+![delay after sync dialog example](delay-after-sync-dialog.png)
+
+In this case, you probably want to synchronize your devices and Anki desktop daily,
+and it might be wise to enable the option “Bury review siblings” 
+in Deck preferences (aka “Bury related reviews”).
 
 ### How it works
 
@@ -25,8 +35,6 @@ of the current card and your answer are not considered. The siblings are
 not rescheduled if they appear after the minimum new interval. The
 following table contains some minimum and maximum delays for siblings,
 taken from the [function used](https://www.desmos.com/calculator/fnh882qnd1).
-
-
 
 |     Interval  | 1 sibling      | 2 siblings    |
 |     --:       | --:            | --:           |
@@ -45,14 +53,25 @@ taken from the [function used](https://www.desmos.com/calculator/fnh882qnd1).
 |     1500 days |  57 to 74 days | 38 to 49 days |
 |     3000 days | 78 to 101 days | 52 to 67 days |
 
+When rescheduling siblings of cards that were changed during synchronization,
+the script will examine the review log to determine which cards where reviewed
+on other devices. It will then look at the most recently changed of these,
+and offer to reschedule their siblings using the same logic as the above, 
+relative to the date of the last review.
 
 ### Settings
 
-You can find the following 2 options in the Tools menu:
+You can find the following options in the Tools menu:
 
-* Enable sibling delaying. Enables or disables the script for current
-deck.
-* Don’t notify if a card is delayed by less than 2 weeks. Since only the
-interval of the sibling is considered, the current card or other siblings
-can become due close to the sibling. To prevent notification spam, check
-this option.
+* *Enable sibling delaying for this deck*. 
+  If the option is greyed out, please choose a deck.
+* *For all decks* → *Don’t notify if a card is delayed by less than 2 weeks*. 
+  Since only the interval of the sibling is considered, 
+  the current card or other siblings can become due close to the sibling.
+  To prevent tooltip spam, check this option.
+* *For all decks* → *After sync, delay siblings without asking*; 
+  *After sync, if any siblings can be delayed, ask whether to delay them or not*;
+  *Do not delay siblings after sync*. You can choose one of these three options.
+  If you choose to delay siblings after sync one way or the other, 
+  you'll be seeing a confirmation tooltip whenever any siblings get delayed after sync.
+  There will be no tooltip or anything else if no delaying could be performed.
