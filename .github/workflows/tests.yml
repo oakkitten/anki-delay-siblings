@@ -1,6 +1,13 @@
-name: CI
+name: Tests
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches-ignore:
+      - update-test-environment/*
+    tags:
+      - '**'
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   run-tests:
@@ -11,16 +18,16 @@ jobs:
         include:
           - name: Anki 2.1.49
             python: 3.8
-            environment: py38-anki49
+            environment: py38-anki2.1.49
           - name: Anki 2.1.51 (Qt5)
             python: 3.9
-            environment: py39-anki51qt5
+            environment: py39-anki2.1.51qt5
           - name: Anki 2.1.51 (Qt6)
             python: 3.9
-            environment: py39-anki51qt6
-          - name: Latest Anki
+            environment: py39-anki2.1.51qt6
+          - name: Pre-release (2.1.52rc1)
             python: 3.9
-            environment: py39-ankilatest
+            environment: py39-ankipre
       fail-fast: false
 
     steps:
@@ -53,13 +60,22 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v2
 
+    # https://github.com/actions/checkout/issues/290
+    - name: Fetch tag annotations
+      run: git fetch --tags --force
+
     - name: Assemble the add-on
-      run: cd delay_siblings && zip -r ../delay_siblings.ankiaddon *
+      run: |
+        export VERSION="$(git describe --long)"
+        cd anki_wallpaper
+        sed -i -r "s/# Wallpaper/\0 <version>$VERSION<\/version>/" config.md
+        zip -r ../anki-wallpaper.ankiaddon *
+        echo ASSET_NAME="anki-wallpaper-$VERSION.ankiaddon" >> "$GITHUB_ENV"
 
     - name: Store artifact
-      uses: svenstaro/upload-release-action@1.0.1
+      uses: svenstaro/upload-release-action@v2
       with:
         tag: ${{ github.ref }}
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: delay_siblings.ankiaddon
-        asset_name: delay_siblings.ankiaddon
+        file: anki-wallpaper.ankiaddon
+        asset_name: ${{ env.ASSET_NAME }}

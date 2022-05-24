@@ -1,0 +1,71 @@
+name: Update
+
+on:
+  schedule:
+   - cron: "0 12 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  update-test-environments:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: Pre-release env
+            environment: pre-release
+          - name: Stable env
+            environment: stable
+
+    steps:
+      - name: Generate access token
+        uses: tibdex/github-app-token@v1
+        id: generate-token
+        with:
+          app_id: ${{ secrets.LOKSMITH_ID }}
+          private_key: ${{ secrets.LOCKSMITH_PRIVATE_KEY }}
+
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Prepare git
+        run: |
+          git config user.name "anki-wallpaper[bot]"
+          git config user.email "105947902+anki-wallpaper[bot]@users.noreply.github.com"
+
+      - name: Update pre-release test environment
+        if: matrix.environment == 'pre-release'
+        continue-on-error: true
+        run: |
+          export PRERELEASE=$(pip index --pre versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
+          export STABLE=$(pip index versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
+          if [ "$PRERELEASE" = "$STABLE" ]; then exit 3; fi
+          python .github/workflows/update.py update-prerelease $PRERELEASE \
+            && git add tox.ini .github/workflows/tests.yml \
+            && git commit -am "Tests: update pre-release env with Anki $PRERELEASE" \
+            && echo PR_TITLE="Update pre-release test environment with Anki $PRERELEASE" >> "$GITHUB_ENV"
+
+      - name: Add new stable test environment
+        if: matrix.environment == 'stable'
+        continue-on-error: true
+        run: |
+          export STABLE=$(pip index versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
+          python .github/workflows/update.py add-stable $STABLE \
+            && git add tox.ini .github/workflows/tests.yml \
+            && git commit -am "Tests: add new environment for Anki $STABLE" \
+            && echo PR_TITLE="Add new test environment for Anki $STABLE" >> "$GITHUB_ENV"
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          title: ${{ env.PR_TITLE }}
+          branch: update-test-environment/${{ matrix.environment }}
+          delete-branch: true

@@ -1,0 +1,33 @@
+name: Fast-forward
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  fast_forward:
+    name: '#${{ github.event.number }}'
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'fast-forward'
+
+    steps:
+      - name: Generate access token
+        uses: tibdex/github-app-token@v1
+        id: generate-token
+        with:
+          app_id: ${{ secrets.LOKSMITH_ID }}
+          private_key: ${{ secrets.LOCKSMITH_PRIVATE_KEY }}
+
+      - name: Checkout pull request
+        uses: actions/checkout@v3
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Fast-forward & push
+        env:
+          PR_COMMIT: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git checkout main
+          git merge --ff-only "$PR_COMMIT"
+          git push origin main
