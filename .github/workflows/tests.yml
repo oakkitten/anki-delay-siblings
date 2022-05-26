@@ -31,7 +31,7 @@ jobs:
           - name: Anki 2.1.52 (Qt6)
             python: 3.9
             environment: py39-anki2.1.52qt6
-          - name: Pre-release (2.1.53rc1)
+          - name: Pre-release (2.1.53rc2)
             python: 3.9
             environment: py39-ankipre
       fail-fast: false
