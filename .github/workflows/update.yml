@@ -44,23 +44,23 @@ jobs:
         if: matrix.environment == 'pre-release'
         continue-on-error: true
         run: |
-          export PRERELEASE=$(pip index --pre versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
-          export STABLE=$(pip index versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
-          if [ "$PRERELEASE" = "$STABLE" ]; then exit 3; fi
-          python .github/workflows/update.py update-prerelease $PRERELEASE \
-            && git add tox.ini .github/workflows/tests.yml \
-            && git commit -am "Tests: update pre-release env with Anki $PRERELEASE" \
-            && echo PR_TITLE="Update pre-release test environment with Anki $PRERELEASE" >> "$GITHUB_ENV"
+          prerelease=$(pip index --pre versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
+          stable=$(pip index versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
+          if [ "$prerelease" = "$stable" ]; then exit 3; fi
+          python .github/workflows/update.py update-prerelease $prerelease
+          git add tox.ini .github/workflows/tests.yml
+          git commit -am "Tests: update pre-release env with Anki $prerelease"
+          echo PR_TITLE="Update pre-release test environment with Anki $prerelease" >> "$GITHUB_ENV"
 
       - name: Add new stable test environment
         if: matrix.environment == 'stable'
         continue-on-error: true
         run: |
-          export STABLE=$(pip index versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
-          python .github/workflows/update.py add-stable $STABLE \
-            && git add tox.ini .github/workflows/tests.yml \
-            && git commit -am "Tests: add new environment for Anki $STABLE" \
-            && echo PR_TITLE="Add new test environment for Anki $STABLE" >> "$GITHUB_ENV"
+          stable=$(pip index versions aqt | perl -ne 'm/aqt \(([\d.a-z]+)\)/ && print "$1"')
+          python .github/workflows/update.py add-stable $stable
+          git add tox.ini .github/workflows/tests.yml
+          git commit -am "Tests: add new environment for Anki $stable"
+          echo PR_TITLE="Add new test environment for Anki $stable" >> "$GITHUB_ENV"
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@v4

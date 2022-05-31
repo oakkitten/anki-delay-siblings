@@ -35,6 +35,10 @@ class File:
             lines.append(line)
         self.contents = "\n".join(lines)
 
+    def replace(self, needle_re: str, replacement: str):
+        self.contents = re.sub(needle_re, replacement, self.contents)
+        return self
+
 
 @contextmanager
 def editing(file_name) -> File:
@@ -48,21 +52,22 @@ def editing(file_name) -> File:
 
 
 def update_prerelease(tox_ini: File, tests_yml: File, version):
-    if re.search(fr"ankipre: anki=={version}\b", tox_ini.contents):
+    if re.search(fr"-pre-anki{version}-", tox_ini.contents):
         exit(1)
     else:
         log(f":: updating pre-release test environment with Anki {version}")
 
-        tox_ini.contents = re.sub(
-            r"ankipre: (anki|aqt\[qt6])==[\d.a-z]+",
-            fr"ankipre: \1=={version}",
-            tox_ini.contents
+        tox_ini.replace(
+            fr"py39-pre-anki[\d.a-z]+-qt6",
+            fr"py39-pre-anki{version}-qt6"
         )
 
-        tests_yml.contents = re.sub(
-            r"Pre-release \([\d.a-z]+\)",
-            fr"Pre-release ({version})",
-            tests_yml.contents
+        tests_yml.replace(
+            fr"py39-pre-anki[\d.a-z]+-qt6",
+            fr"py39-pre-anki{version}-qt6"
+        ).replace(
+            fr"Pre-release \([\d.a-z]+\)",
+            fr"Pre-release ({version})"
         )
 
 
@@ -70,23 +75,14 @@ def update_prerelease(tox_ini: File, tests_yml: File, version):
 
 
 def add_stable(tox_ini: File, tests_yml: File, version):
-    if re.search(fr"}}: anki=={version}\b", tox_ini.contents):
+    if re.search(fr"(?<!-pre)-anki{version}-", tox_ini.contents):
         exit(1)
     else:
         log(f":: adding new stable test environment with Anki {version}")
 
         tox_ini.insert_before_line(
-            "py39-ankipre",
-            f"py39-anki{version}qt{{5,6}}"
-        )
-
-        tox_ini.insert_before_line(
-            "ankipre: anki==",
-            f"""
-            anki{version}qt{{5,6}}: anki=={version}
-            anki{version}qt5: aqt[qt5]=={version}
-            anki{version}qt6: aqt[qt6]=={version}\n
-            """
+            "py39-pre-",
+            f"py39-anki{version}-qt{{5,6}}"
         )
 
         tests_yml.insert_before_line(
@@ -94,10 +90,10 @@ def add_stable(tox_ini: File, tests_yml: File, version):
             f"""
             - name: Anki {version} (Qt5)
               python: 3.9
-              environment: py39-anki{version}qt5
+              environment: py39-anki{version}-qt5
             - name: Anki {version} (Qt6)
               python: 3.9
-              environment: py39-anki{version}qt6
+              environment: py39-anki{version}-qt6
             """
         )
 

@@ -21,26 +21,26 @@ jobs:
             environment: py38-anki2.1.49
           - name: Anki 2.1.51 (Qt5)
             python: 3.9
-            environment: py39-anki2.1.51qt5
+            environment: py39-anki2.1.51-qt5
           - name: Anki 2.1.51 (Qt6)
             python: 3.9
-            environment: py39-anki2.1.51qt6
+            environment: py39-anki2.1.51-qt6
           - name: Anki 2.1.52 (Qt5)
             python: 3.9
-            environment: py39-anki2.1.52qt5
+            environment: py39-anki2.1.52-qt5
           - name: Anki 2.1.52 (Qt6)
             python: 3.9
-            environment: py39-anki2.1.52qt6
+            environment: py39-anki2.1.52-qt6
           - name: Pre-release (2.1.53rc1)
             python: 3.9
-            environment: py39-ankipre
+            environment: py39-pre-anki2.1.53rc1-qt6
       fail-fast: false
 
     steps:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pyqt5-dev-tools xvfb
+          sudo apt-get install -y pyqt5-dev-tools xvfb jq
 
       - name: Setup Python ${{ matrix.python }}
         uses: actions/setup-python@v2
@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Run tests
-        run: tox -e ${{ matrix.environment }} -- --forked --verbose
+        run: tox -vvve ${{ matrix.environment }} -- --forked --verbose
 
   assemble-ankiaddon:
     name: Assemble .ankiaddon
@@ -72,11 +72,11 @@ jobs:
 
     - name: Assemble the add-on
       run: |
-        export VERSION="$(git describe --long)"
+        version="$(git describe --long)"
         cd delay_siblings
-        sed -i -r "s/# Delay siblings/\0 <version>$VERSION<\/version>/" config.md
+        sed -i -r "s/# Delay siblings/\0 <version>$version<\/version>/" config.md
         zip -r ../delay-siblings.ankiaddon *
-        echo ASSET_NAME="delay-siblings-$VERSION.ankiaddon" >> "$GITHUB_ENV"
+        echo ASSET_NAME="delay-siblings-$version.ankiaddon" >> "$GITHUB_ENV"
 
     - name: Store artifact
       uses: svenstaro/upload-release-action@v2
