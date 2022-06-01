@@ -1,10 +1,11 @@
 import aqt
-from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from aqt.qt import QDialog, QVBoxLayout, QDialogButtonBox, QListWidget, QLabel, qconnect
+
+from .tools import html_to_text_line
 
 
 def get_delayed_message(delay):
-    question = strip_html(delay.sibling.question())
+    question = html_to_text_line(delay.sibling.question())
     if len(question) > 30:
         question = question[:30] + "…"
     today = aqt.mw.col.sched.today

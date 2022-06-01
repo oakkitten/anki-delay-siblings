@@ -7,6 +7,10 @@ from anki.consts import QUEUE_TYPE_SUSPENDED, CARD_TYPE_REV as CARD_TYPE_REVIEWI
 from aqt import mw
 from aqt.qt import QAction
 
+try:
+    from anki.utils import html_to_text_line
+except ImportError:
+    from anki.utils import htmlToTextLine as html_to_text_line  # noqa
 
 
 def sorted_by_value(dictionary):

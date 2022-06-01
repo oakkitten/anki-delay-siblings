@@ -11,7 +11,6 @@ from typing import Sequence, Iterator
 
 from anki.cards import Card
 from anki.consts import REVLOG_RESCHED
-from anki.utils import stripHTML as strip_html  # Anki 2.1.49 doesn't have the new name
 from aqt import mw, gui_hooks
 from aqt.utils import tooltip
 from aqt.qt import QActionGroup
@@ -37,6 +36,7 @@ from .tools import (
     epoch_to_anki_days,
     sorted_by_value,
     checkable,
+    html_to_text_line,
 )
 
 
@@ -104,7 +104,7 @@ def get_delays(siblings: Sequence[Card], rescheduling_day: int) -> Iterator[Dela
 
 
 def get_delayed_message(delay: Delay):
-    question = strip_html(delay.sibling.question())
+    question = html_to_text_line(delay.sibling.question())
     today = get_anki_today()
     interval = delay.sibling.ivl
 
