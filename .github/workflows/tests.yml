@@ -43,6 +43,12 @@ jobs:
           - name: Anki 2.1.54 (Qt6)
             python: 3.9
             environment: py39-anki2.1.54-qt6
+          - name: Anki 23.12.1 (Qt5)
+            python: 3.9
+            environment: py39-anki23.12.1-qt5
+          - name: Anki 23.12.1 (Qt6)
+            python: 3.9
+            environment: py39-anki23.12.1-qt6
           - name: Pre-release (2.1.55b3)
             python: 3.9
             environment: py39-pre-anki2.1.55b3-qt6
